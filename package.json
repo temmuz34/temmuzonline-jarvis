@@ -1,0 +1,7 @@
+{
+  "name": "temmuzonline-jarvis-v12",
+  "version": "12.0.0",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node outputs/operations-server.cjs" }
+}

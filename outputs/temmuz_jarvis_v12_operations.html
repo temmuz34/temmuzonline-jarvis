@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070b0e">
+  <title>TemmuzOnline | Operasyon Merkezi</title>
+  <link rel="stylesheet" href="operations-v12.css">
+  <link rel="stylesheet" href="growth.css">
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" async onload="if(document.readyState!=='loading')lucide.createIcons()"></script>
+  <script src="growth-model.js" defer></script>
+  <script src="operations-model.js" defer></script>
+  <script src="growth-ui.js" defer></script>
+  <script src="reference-energy-engine.js" defer></script>
+  <script src="operations-v12.js" defer></script>
+</head>
+<body>
+  <nav class="rail" aria-label="Ana menü">
+    <a class="monogram" href="#" aria-label="TemmuzOnline ana ekran">T</a>
+    <button class="nav-button active" data-view="overview" title="Operasyon merkezi" aria-label="Operasyon merkezi" aria-current="page"><i data-lucide="layout-dashboard">▦</i></button>
+    <button class="nav-button" data-view="team" title="Uzmanlar konseyi" aria-label="Uzmanlar konseyi"><i data-lucide="users">♙</i></button>
+    <button class="nav-button" data-view="content" title="İçerik stüdyosu" aria-label="İçerik stüdyosu"><i data-lucide="clapperboard"></i></button>
+    <button class="nav-button" data-view="insights" title="Analiz ve site aksiyonları" aria-label="Analiz ve site aksiyonları"><i data-lucide="chart-no-axes-combined"></i></button>
+    <button class="nav-button" data-view="reports" title="Rapor arşivi" aria-label="Rapor arşivi"><i data-lucide="file-chart-column">▤</i></button>
+    <button class="nav-button" data-view="settings" title="Rapor ve ses ayarları" aria-label="Rapor ve ses ayarları"><i data-lucide="settings-2">⚙</i></button>
+    <span class="rail-end">TO / 12</span>
+  </nav>
+  <div class="workspace">
+    <header class="topbar">
+      <div><h1>TemmuzOnline <span>/ OPERASYON MERKEZİ</span></h1><p>Satış · Uzmanlar konseyi · JARVIS</p></div>
+      <div class="top-status"><span class="demo-badge">ÖRNEK SATIŞ VERİSİ</span><time id="clock">--:--:--</time><small>İstanbul</small></div>
+    </header>
+    <section class="command-deck" aria-label="JARVIS komuta alanı">
+      <aside class="briefing">
+        <div class="section-kicker">GÜNLÜK BRİFİNG <span class="tiny-dot"></span></div>
+        <dl class="brief-sales" aria-label="Toplam satış özeti">
+          <div class="brief-revenue"><dt>TOPLAM CİRO</dt><dd id="brief-revenue">—</dd></div>
+          <div><dt>SİPARİŞ</dt><dd id="brief-orders">—</dd></div>
+          <div><dt>ORT. SEPET</dt><dd id="brief-basket">—</dd></div>
+        </dl>
+        <small class="brief-sales-source">4 platform · Örnek satış verisi</small>
+        <div class="brief-stat"><span>Konsey</span><strong id="active-team">9 uzman</strong></div>
+        <div class="brief-stat"><span>Rapor planı</span><strong id="plan-label">08:00 / 13:00</strong></div>
+        <div class="next-report"><small>SIRADAKİ RAPOR</small><strong id="next-report">Hesaplanıyor</strong><span id="countdown"></span></div>
+        <button class="command-button" id="run-report"><i data-lucide="clipboard-list">▤</i> Tüm ekip rapor versin</button>
+      </aside>
+      <div class="scene-shell" id="scene-shell">
+        <div class="scene-label"><span>J.A.R.V.I.S</span><span id="voice-label">HAZIR</span></div>
+        <canvas id="aiHumanoid" aria-label="Mavi enerji damarları ve parçacıklardan oluşan JARVIS silüeti"></canvas>
+        <button id="face-talk" title="JARVIS ile mikrofonla konuş" aria-label="JARVIS ile mikrofonla konuş" aria-pressed="false"></button>
+        <div class="scene-bottom"><button class="icon-button" id="replay" aria-label="Oluşumu yeniden oynat" title="Oluşumu yeniden oynat"><i data-lucide="rotate-ccw">↻</i></button><span id="state">BAŞLATILIYOR</span><button class="icon-button" id="mic-button" aria-label="Mikrofonu aç" title="Mikrofonu aç" aria-pressed="false"><i data-lucide="mic">●</i></button></div>
+      </div>
+      <aside class="chat-panel" aria-label="JARVIS sohbet">
+        <div class="chat-heading"><div><strong>JARVIS</strong><span>Yerel komut asistanı</span></div><button class="icon-button" id="voice-output" aria-label="Sesli yanıt" title="Sesli yanıt" aria-pressed="false"><i data-lucide="volume-x">♪</i></button></div>
+        <div id="conversation" role="log" aria-label="Sohbet geçmişi" aria-live="polite"></div>
+        <p id="voice-status" role="status">Mikrofon hazır.</p>
+        <div class="quick-commands"><button data-command="Bugünkü satışları özetle">Satış özeti</button><button data-command="Tüm ekip rapor versin">Ekip raporu</button></div>
+        <form id="chat-form"><label class="sr-only" for="chat-input">JARVIS mesajı</label><input id="chat-input" placeholder="JARVIS'e bir şey söyle…" maxlength="1200" autocomplete="off"><button class="icon-button send" type="submit" title="Gönder" aria-label="Gönder"><i data-lucide="arrow-up">↑</i></button></form>
+      </aside>
+    </section>
+    <main id="main-content">
+      <section id="view-overview" class="view">
+        <div class="commerce-grid"><section class="sales-section"><h3>Platform performansı <span>Örnek gün</span></h3><div class="table-wrap"><table><thead><tr><th>Platform</th><th>Ciro</th><th>Sipariş</th><th>Ort. sepet</th><th>Pay</th></tr></thead><tbody id="platforms"></tbody></table></div><div id="sales-mix" class="sales-mix" aria-label="Platform ciro payları"></div></section><section class="report-preview"><span class="section-kicker">SON KONSEY RAPORU</span><h3 id="latest-title">Henüz rapor yok</h3><p id="latest-summary">Ekip raporları burada görünecek.</p><button class="text-button" data-view="reports">Rapor arşivi <i data-lucide="arrow-up-right">↗</i></button></section></div>
+        <section class="council-section"><div class="view-heading"><div><span class="section-kicker">UZMANLAR KONSEYİ</span><h2>Ekibin aynı masada.</h2></div><button class="text-button" data-view="team">Ekibi yönet <i data-lucide="arrow-up-right">↗</i></button></div><div class="expert-grid" id="overview-team"></div></section>
+      </section>
+      <section id="view-team" class="view" hidden>
+        <div class="view-heading"><div><span class="section-kicker">UZMANLAR KONSEYİ</span><h2>Ekip ve sorumluluklar</h2><p>Tanımlı AI rolleri · bağımsız çalışan ajan bağlantısı yok</p></div><button class="command-button" id="add-expert"><i data-lucide="plus">+</i> Uzman ekle</button></div>
+        <div class="growth-links"><button class="text-button" data-view="content">İçerik ekibi ve takvim <i data-lucide="arrow-up-right"></i></button><button class="text-button" data-view="insights">Analiz ve site denetimi <i data-lucide="arrow-up-right"></i></button></div>
+        <h3 class="team-group-heading">Operasyon konseyi</h3><div class="expert-grid" id="managed-team"></div>
+        <h3 class="team-group-heading">İçerik, büyüme ve analiz ekibi</h3><div class="expert-grid" id="managed-growth-team"></div>
+        <details class="methods"><summary>Çalışma yaklaşımı referansları</summary><p>Bu kişiler ekibimizde değildir; bir işbirliği veya onay iddiası yoktur. Ekip adları kurgusal AI rolleridir.</p><ul><li>İçerik ve marka: <a href="https://annhandley.com/about/" target="_blank" rel="noopener">Ann Handley</a> · hedef kitleye yararlı, tutarlı editoryal içerik.</li><li>LinkedIn: <a href="https://learn.justinwelsh.me/about" target="_blank" rel="noopener">Justin Welsh</a> · düzenli, uzmanlık odaklı içerik sistemi.</li><li>Ölçüm: <a href="https://www.kaushik.net/avinash/bio/" target="_blank" rel="noopener">Avinash Kaushik</a> · iş sonucuna bağlı ölçüm ve test edilebilir aksiyon.</li><li>SEO: <a href="https://www.aleydasolis.com/en/" target="_blank" rel="noopener">Aleyda Solís</a> · teknik inceleme ve etki odaklı önceliklendirme.</li></ul></details>
+      </section>
+      <section id="view-content" class="view" hidden>
+        <div class="view-heading"><div><span class="section-kicker">TEMMUZONLINE / İÇERİK EKİBİ</span><h2>İçerik stüdyosu</h2><p>Instagram: TemmuzOnline · LinkedIn: TemmuzOnline</p></div><span class="status-badge">Yayın bağlantısı yok</span></div>
+        <form id="plan-form" class="growth-form">
+          <label>Ürün / kampanya<input name="topic" required maxlength="100" placeholder="Öne çıkarılacak ürün veya kategori"></label>
+          <label>Hedef kitle<input name="audience" required maxlength="150" placeholder="Kime sesleniyoruz?"></label>
+          <label>Başlangıç<input name="start" type="date" required></label>
+          <label>Plan süresi<select name="days"><option value="1">Günlük</option><option value="7" selected>Haftalık</option><option value="30">Aylık (30 gün)</option></select></label>
+          <button class="command-button" type="submit"><i data-lucide="calendar-plus"></i> Plan oluştur</button>
+        </form>
+        <div class="growth-toolbar"><div class="segmented" aria-label="Takvim dönemi"><button data-period="1" aria-pressed="false">Gün</button><button data-period="7" aria-pressed="true">Hafta</button><button data-period="30" aria-pressed="false">Ay</button></div><label class="compact-field">Tarih<input id="calendar-date" type="date"></label><label class="compact-field">Kanal<select id="calendar-channel"><option value="all">Tümü</option><option>Instagram</option><option>LinkedIn</option></select></label><button class="icon-button" id="export-plan" title="Görünen içerik planını indir" aria-label="İçerik planını indir"><i data-lucide="download"></i></button></div>
+        <p id="plan-count" class="muted"></p><div id="content-list" class="content-list"></div>
+        <p class="connection-note">Takvim ve senaryolar şablon taslağıdır; görsel/video dosyası üretilmez. Medya, ürün doğruluğu ve onay tamamlanmadan yayınlanmaz. Onay vermek paylaşım yapmaz.</p>
+      </section>
+      <section id="view-insights" class="view" hidden>
+        <div class="view-heading"><div><span class="section-kicker">ÖLÇÜM / ÖNCELİK / AKSİYON</span><h2>Analiz ve site takibi</h2><p>Arda: GA4 ve Search Console · Bora: site kontrolü · Mira: görsel denetim</p></div><button class="command-button" id="audit-site"><i data-lucide="scan-search"></i> Erişimi kontrol et</button></div>
+        <div id="site-check" class="site-check"></div>
+        <p class="muted">08:00 / 13:00 raporlarına erişim kontrolü ve kayıtlı bulgular eklenir. Ödeme, mobil görünüm ve tüm sayfalar otomatik taranmaz.</p>
+        <details class="methods"><summary>GA4 / Search Console dönem verisi ekle</summary>
+          <p>Şifre veya API anahtarı girme. Bu form manuel dönem kaydıdır; Google bağlantısı henüz yok. Önceki değerleri eşit gün sayılı bir dönemden al; bilinmeyen alanları sıfır kabul etme.</p>
+          <form id="analytics-form" class="growth-form analytics-form">
+            <label>GA4 mülk numarası<input name="property" maxlength="120" placeholder="123456789" required></label><label>Search Console mülkü<input name="site" maxlength="200" value="sc-domain:temmuzonline.com" required></label>
+            <label>Başlangıç<input name="from" type="date" required></label><label>Bitiş<input name="to" type="date" required></label>
+            <label>Oturum<input name="sessions" type="number" min="0" max="1000000000000000" step="1" required></label><label>Satın alma<input name="purchases" type="number" min="0" max="1000000000000000" step="1" required></label><label>GA4 gelir (TL)<input name="revenue" type="number" min="0" max="1000000000000000" step="0.01" required></label>
+            <label>Organik tıklama<input name="clicks" type="number" min="0" max="1000000000000000" step="1" required></label><label>Gösterim<input name="impressions" type="number" min="0" max="1000000000000000" step="1" required></label><label>Ortalama konum<input name="position" type="number" min="0" max="1000000000000000" step="0.01" required></label>
+            <label>Önceki oturum (isteğe bağlı)<input name="prevSessions" type="number" min="0" step="1"></label><label>Önceki gelir (isteğe bağlı)<input name="prevRevenue" type="number" min="0" step="0.01"></label><label>Önceki tıklama (isteğe bağlı)<input name="prevClicks" type="number" min="0" step="1"></label>
+            <label>Kaynak / rapor adı<input name="source" maxlength="250" required placeholder="GA4 ve GSC dışa aktarımı, tarih"></label>
+            <button class="command-button" type="submit"><i data-lucide="save"></i> Kaydet ve analiz et</button><p id="analytics-error" class="form-error" role="alert"></p>
+          </form>
+        </details>
+        <div class="analysis-result"><h3>Arda / dönem değerlendirmesi</h3><p id="analytics-result"></p></div>
+        <div class="view-heading"><div><span class="section-kicker">SİTE / TEMMUZONLINE.COM</span><h2>Öncelikli düzeltmeler</h2></div><button class="command-button" id="add-issue"><i data-lucide="plus"></i> Bulgu ekle</button></div>
+        <div id="issues-list"></div>
+      </section>
+      <section id="view-reports" class="view" hidden>
+        <div class="view-heading"><div><span class="section-kicker">08:00 / 13:00 · EUROPE/ISTANBUL</span><h2>Konsey raporları</h2></div><div class="actions"><button class="icon-button" id="download-report" title="Seçili raporu indir" aria-label="Seçili raporu indir"><i data-lucide="download">↓</i></button><button class="command-button" id="report-now"><i data-lucide="plus">+</i> Rapor hazırla</button></div></div>
+        <div class="archive-layout"><div id="report-list" aria-label="Rapor listesi"></div><article id="report-detail"></article></div>
+      </section>
+      <section id="view-settings" class="view" hidden>
+        <div class="view-heading"><div><span class="section-kicker">OPERASYON AYARLARI</span><h2>Rapor ve ses planı</h2></div></div>
+        <form id="settings-form" class="settings-form">
+          <div class="setting-row"><div><h3>Otomatik ekip raporu</h3><p>Her gün, tüm aktif uzmanlar. Türkiye saati (UTC+3).</p></div><label class="switch"><input type="checkbox" id="schedule-enabled"><span>Etkin</span></label></div>
+          <div class="time-fields"><label>Sabah raporu<input id="morning-time" type="time" required value="08:00"></label><label>Öğleden sonra raporu<input id="afternoon-time" type="time" required value="13:00"></label></div>
+          <p class="connection-note" id="scheduler-note">Yerel rapor sunucusu kontrol ediliyor…</p>
+          <div class="setting-row"><div><h3>Sesli yanıt</h3><p>JARVIS yanıtlarını Türkçe seslendirir.</p></div><label class="switch"><input id="speech-enabled" type="checkbox"><span>Etkin</span></label></div>
+          <div class="setting-row"><div><h3>Veri bağlantıları</h3><p>Pazaryerleri, GA4, reklam ve yapay zekâ servisi bağlı değil. Satışlar örnek veri; uzman raporları kayıtlı notlara dayanır.</p></div><span class="status-badge">Bağlı değil</span></div>
+          <p id="settings-error" class="form-error" role="alert"></p><button class="command-button" type="submit"><i data-lucide="save">✓</i> Ayarları kaydet</button>
+        </form>
+      </section>
+    </main>
+    <footer><span>TEMMUZONLINE / OPERASYON GÜNLÜĞÜ</span><span id="audit">Merkez hazır.</span></footer>
+  </div>
+  <dialog id="expert-dialog"><form id="expert-form"><div class="dialog-heading"><h2 id="expert-dialog-title">Uzman bilgileri</h2><button class="icon-button" type="button" id="close-expert" title="Kapat" aria-label="Kapat"><i data-lucide="x">×</i></button></div><input type="hidden" id="expert-id"><label>İsim<input id="expert-name" maxlength="60" required></label><label>Uzmanlık<input id="expert-role" maxlength="80" required></label><label>Sorumluluk<input id="expert-task" maxlength="180" required></label><label>Rapor notu<textarea id="expert-note" maxlength="1500" rows="4" placeholder="Uzmanın raporuna eklenecek güncel not"></textarea></label><label class="switch"><input id="expert-active" type="checkbox" checked><span>Günlük raporlara dahil et</span></label><div class="dialog-actions"><button type="button" class="danger-button" id="delete-expert">Uzmanı kaldır</button><button class="command-button" type="submit">Kaydet</button></div><div id="delete-confirm" hidden><p>Bu uzman ekipten kaldırılsın mı? Önceki raporları arşivde kalır.</p><button type="button" class="danger-button" id="confirm-delete">Evet, kaldır</button></div><p class="form-error" id="expert-error" role="alert"></p></form></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
