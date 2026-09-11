@@ -4,7 +4,7 @@
   let volatile=M.initial(),state,selectedReport=null,selectedView='overview',toastTimer;
   let growthUI,insightsUI;
   let recognition=null,voiceMode='idle',recognitionToken=0,speakingToken=0,voiceTimeout=0;
-  let serverOnline=false,configRevision=0,pendingSync=0,syncQueue=Promise.resolve(),polling=false;
+  let serverOnline=false,configRevision=0,pendingSync=0,syncQueue=Promise.resolve(),polling=false,runtimeHealth=null;
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const dateLabel=d=>new Intl.DateTimeFormat('tr-TR',{timeZone:'Europe/Istanbul',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(d));
   function read(){try{const raw=localStorage.getItem(KEY);return raw?M.hydrate(JSON.parse(raw)):volatile;}catch{return volatile;}}
@@ -14,6 +14,7 @@
   function ingestServer(data,includeConfig=true){
     if(data.service!=='temmuz-operations-v12')throw new Error('Yanlış servis');
     serverOnline=true;schedulerNote();
+    runtimeHealth=data.state.serviceHealth||runtimeHealth;
     configRevision=data.configRevision;const remote=M.hydrate(data.state);state=read();
     if(includeConfig){state.experts=remote.experts;state.settings=remote.settings;state.growth=remote.growth;state.briefs=remote.briefs||[];}
     const reports=new Map(state.reports.map(r=>[r.id,r]));remote.reports.forEach(r=>reports.set(r.id,r));state.reports=[...reports.values()].sort((a,b)=>Date.parse(a.createdAt)-Date.parse(b.createdAt)).slice(-60);saveLocal();
@@ -52,7 +53,7 @@
     $('platforms').innerHTML=M.channels.map(c=>`<tr><td><span class="channel-dot" style="--accent:${c.color}"></span>${c.name}</td><td>${M.currency(c.revenue)}</td><td>${c.orders}</td><td>${M.currency(c.revenue/c.orders)}</td><td>%${(c.revenue/revenue*100).toFixed(1).replace('.',',')}</td></tr>`).join('');
     $('sales-mix').innerHTML=M.channels.map(c=>`<span style="--accent:${c.color};width:${c.revenue/revenue*100}%" title="${c.name}"></span>`).join('');
   }
-  function reportSummary(r){return `${r.entries.length} uzmanın raporu hazır.\nÖrnek satış: ${M.currency(r.sales.revenue)} / ${r.sales.orders} sipariş.\n${r.late?'Kaçırılan saat için açılışta hazırlandı.':'Notlar ve bağlantı durumları raporlandı.'}`;}
+  function reportSummary(r){return `${r.entries.length} uzmanın raporu hazır.\nÖRNEK SATIŞ VERİSİ: ${M.currency(r.sales.revenue)} ciro / ${r.sales.orders} sipariş.\n${r.late?'Kaçırılan saat için açılışta hazırlandı.':'Notlar ve bağlantı durumları raporlandı.'}`;}
   function renderReports(){
     const reports=[...state.reports].reverse(),latest=reports[0];
     $('latest-title').textContent=latest?latest.title:'Henüz rapor yok';$('latest-summary').textContent=latest?`${dateLabel(latest.createdAt)}\n${reportSummary(latest)}`:'Planlanan ekip raporları burada görünecek.';
@@ -64,7 +65,7 @@
   function renderExecutiveBrief(){
     const b=state.briefs?.at(-1);if(!b){$('brief-title').textContent='Yönetici özeti bekleniyor';$('brief-headline').textContent='İlk ekip raporu oluşturulduğunda özet burada görünecek.';$('brief-kpis').innerHTML='';$('brief-actions').innerHTML='<p class="empty-state">Henüz brief yok.</p>';$('brief-risks').innerHTML='';return;}
     $('brief-title').textContent=b.title;$('brief-headline').textContent=b.headline;
-    $('brief-kpis').innerHTML=b.kpis.map(k=>`<div><small>${esc(k.label)} · ${esc(k.confidence)}</small><strong>${esc(k.value)}</strong><span>${esc(k.change||'—')}</span></div>`).join('');
+    $('brief-kpis').innerHTML=b.kpis.map(k=>`<div><small>${esc(k.label)} · ${esc(k.confidence==='example'?'ÖRNEK SATIŞ VERİSİ':k.confidence)}</small><strong>${esc(k.value)}</strong><span>${esc(k.change||'—')}</span></div>`).join('');
     $('brief-actions').innerHTML=b.actions.map(a=>`<article class="brief-item ${a.priority}"><strong>${esc(a.text)}</strong><small>${esc(a.owner||'Sahipsiz')} · ${esc(a.source)}</small></article>`).join('')||'<p class="empty-state">Şu anda yüksek öncelikli aksiyon bulunmuyor.</p>';
     $('brief-risks').innerHTML=[...b.risks.map(x=>`<article class="brief-item"><strong>Risk</strong><p>${esc(x)}</p></article>`),...b.opportunities.map(x=>`<article class="brief-item opportunity"><strong>Fırsat</strong><p>${esc(x)}</p></article>`)].join('')||'<p class="empty-state">Doğrulanmış risk veya fırsat yok.</p>';
     $('brief-meta').textContent=`Güncellendi: ${dateLabel(b.createdAt)} · Güven: ${b.confidence} · Kaynak: ${b.sources.join(', ')||'Yok'}`;
@@ -85,8 +86,13 @@
     const next=M.nextSlot(state,now);$('next-report').textContent=next?`${M.localDay(now)===next.day?'Bugün':'Yarın'} / ${next.time}`:'Otomatik rapor kapalı';
     if(next){const min=Math.ceil((next.at-now)/60000);$('countdown').textContent=`${Math.floor(min/60)} sa ${min%60} dk kaldı`;}else $('countdown').textContent='Raporlar elle hazırlanabilir.';
   }
-  function runManual(){
-    let report;change(s=>{report=M.makeReport(s,{id:`manual:${crypto.randomUUID()}`});M.appendReport(s,report);});selectedReport=report.id;refresh();toast(`${report.entries.length} uzmanın raporu hazır.`);return report;
+  async function runManual(){
+    if(serverOnline){
+      await syncQueue;
+      await Promise.allSettled(['analytics/summary','search-console/summary'].map(path=>fetch('/api/google/'+path,{signal:AbortSignal.timeout(15000)})));
+      try{const response=await fetch('/api/operations',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(response.ok)ingestServer(await response.json());}catch{}
+    }
+    let report;change(s=>{report=M.makeReport({...s,serviceHealth:runtimeHealth},{id:`manual:${crypto.randomUUID()}`});M.appendReport(s,report,Date.now(),runtimeHealth);});selectedReport=report.id;refresh();toast(`${report.entries.length} uzmanın raporu hazır.`);return report;
   }
   function scheduledRun(){
     if(serverOnline){pollServer();return;}
@@ -140,7 +146,7 @@
     if(/icerik|instagram|linkedin|influencer|reels|hikaye/.test(q)){switchView('content');const g=state.growth;return `TemmuzOnline içerik ekibi hazır: Duru strateji, Can Reels/hikâye, İlay tasarım, Selma LinkedIn, Elif influencer ve topluluk. ${g.posts.length} kayıtlı taslak var. İçerik stüdyosunda ürün ve hedef kitleyle günlük, haftalık veya aylık plan oluşturabilirsin. Medya üretimi ve yayın API bağlantısı henüz yok; hiçbir paylaşım yapılmadı.`;}
     if(/ga4|analytics|search console|analiz rapor/.test(q))return window.GrowthModel.analytics(state.growth).join('\n\n');
     if(/site rapor|site durum|acil|duzeltme|site denetim/.test(q))return window.GrowthModel.siteReport(state.growth).join('\n\n');
-    if(q.includes('rapor')&&(q.includes('ekip')||q.includes('tum')||q.includes('hazirla')||q.includes('ver'))){const r=runManual();return `Konsey raporu hazır. ${r.entries.length} uzman rapor verdi.\n\n${r.entries.map(e=>`${e.name} / ${e.role}\n${e.text}`).join('\n\n')}\n\nRapor arşive kaydedildi.`;}
+    if(q.includes('rapor')&&(q.includes('ekip')||q.includes('tum')||q.includes('hazirla')||q.includes('ver'))){const r=await runManual();return `Konsey raporu hazır. ${r.entries.length} uzman rapor verdi.\n\n${r.entries.map(e=>`${e.name} / ${e.role}\n${e.text}`).join('\n\n')}\n\nRapor arşive kaydedildi.`;}
     if(q.includes('rapor')&&(q.includes('saat')||q.includes('ne zaman')||q.includes('plan'))){return `Rapor planı ${state.settings.enabled?'açık':'kapalı'}. Türkiye saatiyle her gün ${state.settings.times.join(' ve ')}. Render Free uykuya geçebilir; zamanında tetikleme için harici zamanlayıcı gerekir.`;}
     if(q.includes('son rapor')){const r=state.reports.at(-1);return r?`${r.title}\n${reportSummary(r)}\n${r.entries.map(e=>`${e.name}: ${e.text}`).join('\n\n')}`:'Henüz rapor yok. Tüm ekip rapor versin diyerek hazırlayabilirsin.';}
     const member=state.experts.find(e=>q.includes(M.normalize(e.name))||q.includes(M.normalize(e.name.split(' ')[0]))||q.includes(M.normalize(e.role)));
@@ -180,7 +186,7 @@
   $('chat-form').addEventListener('submit',e=>{e.preventDefault();submit($('chat-input').value);});
   $('face-talk').onclick=toggleMicrophone;$('mic-button').onclick=toggleMicrophone;
   $('voice-output').onclick=()=>{change(s=>s.settings.speech=!s.settings.speech);if(!state.settings.speech)stopSpeaking();updateSpeechButton();toast(state.settings.speech?'Sesli yanıt açık.':'Sesli yanıt kapalı.');};
-  $('run-report').onclick=()=>submit('Tüm ekip rapor versin');$('report-now').onclick=()=>{runManual();switchView('reports');};$('brief-speak').onclick=()=>{const b=read().briefs?.at(-1);if(b)speak(b.voiceScript);};
+  $('run-report').onclick=()=>submit('Tüm ekip rapor versin');$('report-now').onclick=async()=>{await runManual();switchView('reports');};$('brief-speak').onclick=()=>{const b=read().briefs?.at(-1);if(b)speak(b.voiceScript);};
   $('add-expert').onclick=()=>openExpert(null);$('close-expert').onclick=()=>$('expert-dialog').close();
   $('delete-expert').onclick=()=>$('delete-confirm').hidden=false;
   $('confirm-delete').onclick=()=>{const id=$('expert-id').value;change(s=>s.experts=s.experts.filter(e=>e.id!==id));$('expert-dialog').close();refresh();toast('Uzman ekipten kaldırıldı.');};

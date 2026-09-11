@@ -1,7 +1,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.InsightEngine=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
  const rules={drop:-20,impressions:1000,ctr:0.02,positionMin:8,positionMax:20,positionChange:3};
  function insights(data={},audit=null){
-  const notes=[],add=(owner,severity,title,action,source)=>notes.push({owner,severity,title,action,source});
+  const notes=[],add=(owner,severity,title,action,source,detail={})=>notes.push({owner,severity,title,action,source,...detail});
   const ga=data.analytics,sc=data.searchConsole;
   if(ga){for(const [key,label] of [['activeUsers','Kullanıcı'],['sessions','Oturum'],['ecommercePurchases','Satın alma'],['purchaseRevenue','Gelir'],['engagementRate','Etkileşim']]){const d=ga.changes[key];if(d!==null&&Number.isFinite(d)&&d<=rules.drop)add('Arda','high',`${label} %${Math.abs(d).toFixed(1)} düştü.`, 'Kanal, cihaz ve açılış sayfası dağılımını karşılaştırın; bu değişim tek başına neden belirtmez.',ga.at);}
    const devices=ga.breakdowns.deviceCategory||[],mobile=devices.find(d=>d.name==='mobile'),desktop=devices.find(d=>d.name==='desktop');
@@ -14,8 +14,8 @@
     const p=old.get(q);if(p?.impressions>=100&&r.impressions>=100&&Math.abs(r.position-p.position)>=rules.positionChange)add('Bora',r.position>p.position?'high':'opportunity',`${q}: konum ${p.position.toFixed(1)} → ${r.position.toFixed(1)}`,'Dönemlerin sorgu/sayfa dağılımını karşılaştırın.',sc.at);
    }
   }
-  for(const i of audit?.issues||[])add(i.code==='image-alt'?'Mira':'Bora',i.severity,i.title,i.action,audit.at);
-  return notes.sort((a,b)=>['critical','high','normal','opportunity'].indexOf(a.severity)-['critical','high','normal','opportunity'].indexOf(b.severity));
+  for(const i of audit?.issues||[])add(i.code==='image-alt'?'Mira':'Bora',i.severity,i.title,i.action,audit.at,{url:i.url,code:i.code,origin:'audit'});
+  return [...new Map(notes.map(n=>[JSON.stringify([n.source,n.url||'',n.code||n.type||'',n.title]),n])).values()].sort((a,b)=>['critical','high','normal','opportunity'].indexOf(a.severity)-['critical','high','normal','opportunity'].indexOf(b.severity));
  }
  return {rules,insights};
 });

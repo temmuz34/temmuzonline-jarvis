@@ -7,6 +7,7 @@ async function searchConsole(auth,property){
  const empty={clicks:0,impressions:0,ctr:0,position:0};
  const current=(await query(dates.current)).rows?.[0]||{...empty},previous=(await query(dates.previous)).rows?.[0]||{...empty};
  const breakdowns={},previousBreakdowns={};
+ breakdowns.queryPage=(await query(dates.current,['query','page'])).rows||[];
  for(const dimension of ['query','page','device','country']){
   breakdowns[dimension]=(await query(dates.current,[dimension])).rows||[];
   if(dimension==='query'||dimension==='page')previousBreakdowns[dimension]=(await query(dates.previous,[dimension])).rows||[];

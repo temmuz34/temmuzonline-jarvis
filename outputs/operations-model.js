@@ -1,8 +1,8 @@
 (function(root,factory){
-  const api=factory(typeof module==='object'&&module.exports?require('./growth-model.js'):root.GrowthModel);
+  const api=factory(typeof module==='object'&&module.exports?require('./growth-model.js'):root.GrowthModel,typeof module==='object'&&module.exports?require('./council-report.js'):root.CouncilReport);
   if(typeof module==='object'&&module.exports)module.exports=api;
   else root.OperationsModel=api;
-})(typeof globalThis!=='undefined'?globalThis:this,function(G){
+})(typeof globalThis!=='undefined'?globalThis:this,function(G,C){
   'use strict';
   const channels=[
     {id:'trendyol',name:'Trendyol',revenue:82400,orders:142,color:'#ff923e'},
@@ -58,29 +58,13 @@
     return null;
   }
   function expertFinding(expert,state){
-    if(expert.note.trim())return {text:expert.note.trim(),source:'Kayıtlı ekip notu'};
-    const engine=typeof module==='object'&&module.exports?require('./insight-engine.js'):globalThis.InsightEngine;
-    const owner={arda:'Arda',bora:'Bora',atlas:'Bora',mira:'Mira'}[expert.id];
-    const notes=owner&&engine?engine.insights(state.growth.google,state.growth.checks.at(-1)).filter(n=>n.owner===owner).slice(0,5):[];
-    if(notes.length)return {text:notes.map(n=>`${n.severity.toUpperCase()}: ${n.title}\n${n.action}\nVeri zamanı: ${n.source}`).join('\n\n'),source:'Google / site denetimi gerçek verilerinden kural tabanlı değerlendirme'};
-    const growth=state&&G.finding(expert,state.growth||G.initial());if(growth)return growth;
-    const {revenue,orders}=totals();
-    const defaults={
-      lara:`Örnek satış toplamı ${currency(revenue)}, ${orders} sipariş. Dönüşüm değerlendirmesi için GA4 oturum ve huni verisi bekleniyor.`,
-      atlas:'Search Console ve site tarama verisi bağlı değil. Sıralama değişimi ve teknik SEO bulgusu henüz doğrulanamıyor.',
-      mert:`Örnek veride Trendyol ${currency(channels[0].revenue)} ile toplam cironun %${Math.round(channels[0].revenue/revenue*100)} payını oluşturuyor. Gerçek sipariş ve Buy Box verisi bekleniyor.`,
-      selin:'Google Ads ve Meta harcama verileri bağlı değil. ROAS veya bütçe değişikliği önerisi için doğrulanmış kampanya verisi gerekli.',
-      ece:`Örnek veride ortalama sepet ${currency(revenue/orders)}. Mobil ödeme kayıpları için oturum ve checkout verisi bekleniyor.`,
-      kerem:'Ürün maliyeti, komisyon, iade ve reklam giderleri bağlı değil. Net kâr ve marj hesaplanamadı.',
-      deniz:`Örnek veri ${orders} sipariş içeriyor. Stok ve sevkiyat kaynağı bağlı olmadığı için kritik stok listesi oluşturulamadı.`,
-      ada:'Güncel ürün içerikleri ve yayın planı bekleniyor. Marka dili denetimi için içerik kaydı gerekli.',
-      mira:'TemmuzOnline sayfaları bu raporda canlı taranmadı. Banner, mobil tipografi ve ürün görseli incelemesi için güncel sayfa verisi veya ekip notu bekleniyor.'
-    };
-    return {text:defaults[expert.id]||'Bu uzman için henüz rapor notu veya bağlı veri kaynağı yok.',source:'Örnek veri / bağlantı durumu'};
+    return C.entry(expert,C.snapshot(state,{...totals(),channels,mode:'example'},Date.now()));
   }
   function makeReport(state,{now=Date.now(),slot=null,id}={}){
-    const entries=state.experts.filter(e=>e.active).map(e=>({id:e.id,name:e.name,role:e.role,task:e.task,...expertFinding(e,state)}));
-    return {id:slot?slot.id:id||`manual:${now}`,createdAt:new Date(now).toISOString(),scheduledAt:slot?new Date(slot.at).toISOString():null,late:!!slot&&now-slot.at>60000,title:slot?`${slot.time} Konsey raporu`:'Anlık konsey raporu',sales:{...totals(),channels:channels.map(c=>({...c})),mode:'example'},entries};
+    const sales={...totals(),channels:channels.map(c=>({...c})),mode:'example',label:'ÖRNEK SATIŞ VERİSİ'};
+    const snapshot=C.snapshot(state,sales,now);
+    const entries=state.experts.filter(e=>e.active).map(e=>({id:e.id,name:e.name,role:e.role,task:e.task,...C.entry(e,snapshot)}));
+    return {id:slot?slot.id:id||`manual:${now}`,createdAt:new Date(now).toISOString(),scheduledAt:slot?new Date(slot.at).toISOString():null,late:!!slot&&now-slot.at>60000,title:slot?`${slot.time} Konsey raporu`:'Anlık konsey raporu',sales,snapshot,seoOpportunities:C.seo(snapshot.google.searchConsole),entries};
   }
   function makeExecutiveBrief(state,report,now=Date.now()){const E=typeof module==='object'&&module.exports?require('./executive-brief.js'):globalThis.ExecutiveBrief;return E.make(state,report,now);}
   function appendReport(state,report,now=Date.now(),runtimeHealth=null){if(state.reports.some(r=>r.id===report.id))return;state.reports.push(report);state.reports=state.reports.slice(-60);const briefState=runtimeHealth?{...state,serviceHealth:runtimeHealth}:state;state.briefs=[...(state.briefs||[]).filter(b=>b.reportId!==report.id),makeExecutiveBrief(briefState,report,now)].slice(-30);}

@@ -22,6 +22,18 @@ async function main(){
  }return Response.json({rows:[{keys:body.dimensions.length?['test']:[],clicks:20,impressions:2000,ctr:0.01,position:12}]});};
  const google=createGoogleService(env,mock);const [a,s]=await Promise.all([google.get('analytics'),google.get('searchConsole')]);assert.equal(tokens,1);assert.equal(a.current.addToCarts,null);assert.equal(s.current.clicks,20);const before=requests;await google.get('analytics');assert.equal(requests,before);await google.get('analytics',true);assert.ok(requests>before);assert.ok(google.status().analytics);assert.ok(insights({analytics:a,searchConsole:s}).length);
  await assert.rejects(createGoogleService({},mock).get('analytics'),/GA4 mülk/);
+ let failing=null;
+ const tracked=createGoogleService(env,(url,options)=>url.includes(failing||'never-match')?Response.json({}, {status:403}):mock(url,options));
+ assert.deepEqual(tracked.status().configured,{analytics:true,searchConsole:true});
+ assert.equal(tracked.status().analytics,false);assert.equal(tracked.status().lastSync,null);
+ await tracked.get('analytics');assert.equal(tracked.status().analytics,true);assert.equal(tracked.status().searchConsole,false);assert.ok(Number.isFinite(Date.parse(tracked.status().lastSync)));
+ await tracked.get('searchConsole');assert.equal(tracked.status().searchConsole,true);assert.equal(tracked.status().lastError,null);
+ for(const [kind,urlPart,other] of [['analytics','analyticsdata','searchConsole'],['searchConsole','webmasters','analytics']]){
+  failing=urlPart;await assert.rejects(tracked.get(kind,true));assert.equal(tracked.status()[kind],false);assert.equal(tracked.status()[other],true);assert.ok(tracked.status().lastError);assert.deepEqual(tracked.status().configured,{analytics:true,searchConsole:true});
+  await tracked.get(other,true);assert.ok(tracked.status().lastError);
+  failing=null;await tracked.get(kind);assert.equal(tracked.status()[kind],true);assert.equal(tracked.status().lastError,null);
+ }
+ console.log('PASS: Google individual sync status, lastSync, partial failure, recovery and independent configuration.');
  for(const code of [401,403,429]){const service=createGoogleService(env,async u=>u.includes('oauth2')?Response.json({access_token:'fixture',expires_in:3600}):Response.json({}, {status:code}));await assert.rejects(service.get('analytics'),e=>e.status===code&&!e.message.includes('fixture-secret'));}
  console.log('PASS: router, real-data-only insights, crawler limits/robots/redirects/SEO, Google refresh/cache/fallback/error mappings.');
 }
