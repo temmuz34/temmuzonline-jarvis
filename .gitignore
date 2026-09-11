@@ -7,3 +7,5 @@ work/
 work/v12-runtime/operations.json
 work/v12-runtime/operations.json.tmp
 *.log
+.pnpm-store/
+*.zip

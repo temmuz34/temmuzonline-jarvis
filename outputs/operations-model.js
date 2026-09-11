@@ -24,7 +24,7 @@
   const currency=n=>new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:0}).format(n);
   const totals=()=>({revenue:channels.reduce((s,c)=>s+c.revenue,0),orders:channels.reduce((s,c)=>s+c.orders,0)});
   const normalize=s=>String(s).toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i');
-  function initial(){return {version:12,experts:[...templates,...G.roles].map(([id,name,role,task,color])=>({id,name,role,task,color,note:'',active:true})),settings:{enabled:true,times:['08:00','13:00'],speech:true},growth:G.initial(),reports:[],messages:[]};}
+  function initial(){return {version:12,experts:[...templates,...G.roles].map(([id,name,role,task,color])=>({id,name,role,task,color,note:'',active:true})),settings:{enabled:true,times:['08:00','13:00'],speech:true},growth:G.initial(),reports:[],briefs:[],messages:[]};}
   function validTimes(times){return Array.isArray(times)&&times.length===2&&times.every(t=>/^([01]\d|2[0-3]):[0-5]\d$/.test(t))&&times[0]!==times[1];}
   function hydrate(raw){
     const state=initial();if(!raw||raw.version!==12)return state;
@@ -33,6 +33,7 @@
     state.growth=G.hydrate(raw.growth);
     if(!raw.growth){for(const [id,name,role,task,color] of G.roles)if(!state.experts.some(e=>e.id===id))state.experts.push({id,name,role,task,color,note:'',active:true});}
     if(Array.isArray(raw.reports))state.reports=raw.reports.filter(r=>r&&typeof r.id==='string'&&Array.isArray(r.entries)&&r.sales&&Number.isFinite(Date.parse(r.createdAt))).slice(-60);
+    if(Array.isArray(raw.briefs))state.briefs=[...new Map(raw.briefs.filter(b=>b&&typeof b.id==='string'&&typeof b.reportId==='string'&&typeof b.voiceScript==='string'&&Array.isArray(b.kpis)&&Array.isArray(b.actions)&&Array.isArray(b.risks)&&Array.isArray(b.opportunities)).map(b=>[b.id,b])).values()].slice(-30);
     if(Array.isArray(raw.messages))state.messages=raw.messages.filter(m=>m&&typeof m.text==='string'&&['user','assistant'].includes(m.role)).slice(-80);
     return state;
   }
@@ -58,6 +59,10 @@
   }
   function expertFinding(expert,state){
     if(expert.note.trim())return {text:expert.note.trim(),source:'Kayıtlı ekip notu'};
+    const engine=typeof module==='object'&&module.exports?require('./insight-engine.js'):globalThis.InsightEngine;
+    const owner={arda:'Arda',bora:'Bora',atlas:'Bora',mira:'Mira'}[expert.id];
+    const notes=owner&&engine?engine.insights(state.growth.google,state.growth.checks.at(-1)).filter(n=>n.owner===owner).slice(0,5):[];
+    if(notes.length)return {text:notes.map(n=>`${n.severity.toUpperCase()}: ${n.title}\n${n.action}\nVeri zamanı: ${n.source}`).join('\n\n'),source:'Google / site denetimi gerçek verilerinden kural tabanlı değerlendirme'};
     const growth=state&&G.finding(expert,state.growth||G.initial());if(growth)return growth;
     const {revenue,orders}=totals();
     const defaults={
@@ -77,5 +82,7 @@
     const entries=state.experts.filter(e=>e.active).map(e=>({id:e.id,name:e.name,role:e.role,task:e.task,...expertFinding(e,state)}));
     return {id:slot?slot.id:id||`manual:${now}`,createdAt:new Date(now).toISOString(),scheduledAt:slot?new Date(slot.at).toISOString():null,late:!!slot&&now-slot.at>60000,title:slot?`${slot.time} Konsey raporu`:'Anlık konsey raporu',sales:{...totals(),channels:channels.map(c=>({...c})),mode:'example'},entries};
   }
-  return {channels,currency,totals,normalize,initial,hydrate,validTimes,localDay,slotAt,dueSlots,nextSlot,expertFinding,makeReport};
+  function makeExecutiveBrief(state,report,now=Date.now()){const E=typeof module==='object'&&module.exports?require('./executive-brief.js'):globalThis.ExecutiveBrief;return E.make(state,report,now);}
+  function appendReport(state,report,now=Date.now(),runtimeHealth=null){if(state.reports.some(r=>r.id===report.id))return;state.reports.push(report);state.reports=state.reports.slice(-60);const briefState=runtimeHealth?{...state,serviceHealth:runtimeHealth}:state;state.briefs=[...(state.briefs||[]).filter(b=>b.reportId!==report.id),makeExecutiveBrief(briefState,report,now)].slice(-30);}
+  return {makeExecutiveBrief,appendReport,channels,currency,totals,normalize,initial,hydrate,validTimes,localDay,slotAt,dueSlots,nextSlot,expertFinding,makeReport};
 });

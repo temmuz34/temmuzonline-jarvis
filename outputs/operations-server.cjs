@@ -5,26 +5,26 @@ const path=require('node:path');
 const M=require('./operations-model.js');
 const G=require('./growth-model.js');
 const {audit}=require('./site-audit.cjs');
+const {createStorage}=require('./storage.cjs');
+const {createGoogleService}=require('./google-service.cjs');
+const {makeExecutiveBrief,appendReport}=M;
+const google=createGoogleService(),storage=createStorage();
+const crypto=require('node:crypto');
 const port=Number(process.env.PORT||process.env.TEMMUZ_PORT||8766);
 const host=process.env.HOST||'0.0.0.0';
 const authUser=process.env.TEMMUZ_AUTH_USER||'';
 const authPassword=process.env.TEMMUZ_AUTH_PASSWORD||'';
 const authEnabled=Boolean(authUser&&authPassword);
-const root=__dirname,dataDir=process.env.TEMMUZ_DATA_DIR||path.resolve(root,'../work/v12-runtime');
-fs.mkdirSync(dataDir,{recursive:true});
-const file=path.join(dataDir,'operations.json');
-let state=M.initial(),configRevision=0;
-if(fs.existsSync(file)){
-  const stored=JSON.parse(fs.readFileSync(file,'utf8'));
-  state=M.hydrate(stored.state);configRevision=stored.configRevision||0;
-}
-function persist(){const tmp=file+'.tmp';fs.writeFileSync(tmp,JSON.stringify({configRevision,state},null,2),'utf8');fs.renameSync(tmp,file);}
-let pendingAudit=null,pendingSchedule=null,lastAuditAttempt=0;
-async function runAudit(){
+const root=__dirname;
+let state=M.initial(),configRevision=0,storageHealth=null,storageReady=Promise.resolve();
+storageReady=Promise.resolve(storage.load()).then(stored=>{if(stored){state=M.hydrate(stored.state);configRevision=stored.configRevision||0;}return Promise.resolve(storage.health()).then(h=>{storageHealth=h;});});
+async function persist(){await storage.save({configRevision,state});try{storageHealth=await storage.health();}catch{}}
+let pendingAudit=null,pendingSchedule=null,lastAuditAttempt=Date.parse(state.growth.checks.at(-1)?.at)||0;
+async function runAudit(force=false){
   if(pendingAudit)return pendingAudit;
-  if(Date.now()-lastAuditAttempt<60000&&state.growth.checks.length)return state.growth.checks.at(-1);
+  if(!force&&Date.now()-lastAuditAttempt<12*60000&&state.growth.checks.length)return state.growth.checks.at(-1);
   lastAuditAttempt=Date.now();
-  pendingAudit=(async()=>{const result=await audit();const old=state;state={...state,growth:{...state.growth,checks:[...state.growth.checks,result].slice(-30)}};try{persist();}catch(e){state=old;throw e;}return result;})();
+  pendingAudit=(async()=>{const result=await audit();const old=state;state={...state,growth:{...state.growth,checks:[...state.growth.checks,result].slice(-30)}};try{await persist();}catch(e){state=old;throw e;}return result;})();
   try{return await pendingAudit;}finally{pendingAudit=null;}
 }
 async function schedule(now=Date.now()){
@@ -32,15 +32,24 @@ async function schedule(now=Date.now()){
   if(!M.dueSlots(state,now).length)return;
   pendingSchedule=(async()=>{
   await runAudit();
+  await Promise.allSettled(['analytics','searchConsole'].map(kind=>syncGoogle(kind)));
+  const googleStatus=google.status();
   const due=M.dueSlots(state,now);if(!due.length)return;
+  storageHealth=await storage.health();
   const next={...state,reports:[...state.reports]};
-  for(const slot of due)next.reports.push(M.makeReport(state,{now,slot}));
+  for(const slot of due)appendReport(next,M.makeReport(state,{now,slot}),now,{storage:storageHealth,google:googleStatus,googleError:Boolean(googleStatus.lastError)});
   next.reports=next.reports.slice(-60);const old=state;state=next;
-  try{persist();}catch(e){state=old;throw e;}
+  try{await persist();}catch(e){state=old;throw e;}
   })();
   try{return await pendingSchedule;}finally{pendingSchedule=null;}
 }
-function publicState(){return {service:'temmuz-operations-v12',timeZone:'Europe/Istanbul',configRevision,state:{...state,messages:[]}};}
+function publicState(){return {service:'temmuz-operations-v12',timeZone:'Europe/Istanbul',configRevision,state:{...state,messages:[],serviceHealth:{storage:storageHealth,google:google.status()}}};}
+async function syncGoogle(kind,force=false){
+ const data=await google.get(kind,force);state.growth.google={...state.growth.google,[kind]:data};
+ const history=state.growth.googleHistory||[];
+ if(!history.some(x=>x.kind===kind&&x.at===data.at))state.growth.googleHistory=[...history,{kind,at:data.at,current:data.current}].slice(-30);
+ await persist();return data;
+}
 function json(res,status,body){res.writeHead(status,{'Content-Type':'application/json;charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));}
 function authorized(req,res){
   if(!authEnabled)return true;
@@ -52,40 +61,51 @@ function authorized(req,res){
 }
 function validConfig(c){return c&&M.validTimes(c.settings?.times)&&typeof c.settings.enabled==='boolean'&&typeof c.settings.speech==='boolean'&&Array.isArray(c.experts)&&c.experts.length<=100&&new Set(c.experts.map(e=>e.id)).size===c.experts.length&&c.experts.every(e=>e&&typeof e.id==='string'&&e.id.length<=100&&typeof e.name==='string'&&e.name.trim()&&e.name.length<=60&&typeof e.role==='string'&&e.role.trim()&&e.role.length<=80&&typeof e.task==='string'&&e.task.trim()&&e.task.length<=180&&typeof e.note==='string'&&e.note.length<=1500&&typeof e.active==='boolean'&&/^#[a-f0-9]{6}$/i.test(e.color));}
 const mime={'.html':'text/html;charset=utf-8','.js':'text/javascript;charset=utf-8','.css':'text/css;charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.ico':'image/x-icon'};
-persist();
 const server=http.createServer(async(req,res)=>{
-  if(!authorized(req,res))return;
   let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);}catch{return json(res,400,{error:'Geçersiz adres'});}
+  if(pathname==='/api/scheduler/run'){
+    const expected=process.env.SCHEDULE_SECRET||'',provided=String(req.headers.authorization||'').replace(/^Bearer /,'');
+    const equal=expected&&crypto.timingSafeEqual(crypto.createHash('sha256').update(expected).digest(),crypto.createHash('sha256').update(provided).digest());
+    if(req.method!=='POST'||!equal)return json(res,401,{error:'Zamanlayıcı yetkilendirmesi gerekli.'});
+    try{await schedule();return json(res,200,{ok:true,reports:state.reports.length});}catch{return json(res,503,{error:'Planlı rapor kaydedilemedi.'});}
+  }
+  if(!authorized(req,res))return;
+  if(pathname==='/api/google/status'&&req.method==='GET'){try{const storageStatus=await storage.health();storageHealth=storageStatus;return json(res,200,{...google.status(),storage:storageStatus,authEnabled,schedulerConfigured:!!process.env.SCHEDULE_SECRET,server:'Sunucu bağlantısı aktif'});}catch{return json(res,503,{error:'Storage health alınamadı.',...google.status(),storage:storageHealth});}}
+  if(['/api/google/analytics/summary','/api/google/search-console/summary'].includes(pathname)){
+    if(req.method!=='GET')return json(res,405,{error:'Yöntem desteklenmiyor'});
+    try{const force=new URL(req.url,'http://localhost').searchParams.get('refresh')==='1';const data=await syncGoogle(pathname.includes('/analytics/')?'analytics':'searchConsole',force);return json(res,200,data);}catch(e){return json(res,[401,403,429].includes(e.status)?e.status:503,{error:e.message});}
+  }
   if(pathname==='/api/operations'){
     if(req.method==='GET')return json(res,200,publicState());
     if(req.method!=='POST')return json(res,405,{error:'Yöntem desteklenmiyor'});
     if(req.headers['x-temmuz-client']!=='operations-v12'||!String(req.headers['content-type']).startsWith('application/json'))return json(res,403,{error:'İstek kaynağı reddedildi'});
     let body='',bytes=0;
     req.on('data',chunk=>{bytes+=chunk.length;if(bytes>2*1024*1024){req.destroy();return;}body+=chunk;});
-    req.on('end',()=>{
+    req.on('end',async()=>{
       try{
         const input=JSON.parse(body);
         if(input.config&&!validConfig(input.config))return json(res,400,{error:'Ekip veya rapor ayarları geçersiz.'});
         if(input.config?.growth&&!G.valid(input.config.growth))return json(res,400,{error:'İçerik veya analiz kaydı geçersiz.'});
         if(input.config&&input.configRevision!==configRevision)return json(res,409,{error:'Ayarlar başka bir sekmede güncellendi.',...publicState()});
         const oldState=state,oldRevision=configRevision;
-        let next={...state,reports:[...state.reports]};
-        if(input.config){next.experts=input.config.experts;next.settings=input.config.settings;if(input.config.growth)next.growth={...input.config.growth,checks:state.growth.checks};configRevision++;}
+        let next={...state,reports:[...state.reports],briefs:[...(state.briefs||[])]};
+        if(input.config){next.experts=input.config.experts;next.settings=input.config.settings;if(input.config.growth)next.growth={...input.config.growth,checks:state.growth.checks,google:state.growth.google,googleHistory:state.growth.googleHistory};configRevision++;}
         if(Array.isArray(input.reports)){
           const reports=M.hydrate({version:12,reports:input.reports}).reports;
-          const known=new Set(next.reports.map(r=>r.id));
-          for(const r of reports)if(!known.has(r.id)){next.reports.push(r);known.add(r.id);}
+          const runtimeHealth={storage:storageHealth,google:google.status(),googleError:Boolean(google.status().lastError)};
+          for(const r of reports)appendReport(next,r,Date.parse(r.createdAt)||Date.now(),runtimeHealth);
           next.reports.sort((a,b)=>Date.parse(a.createdAt)-Date.parse(b.createdAt));next.reports=next.reports.slice(-60);
         }
         state=next;
-        try{persist();schedule().catch(e=>console.error('Schedule:',e.message));}catch(e){state=oldState;configRevision=oldRevision;throw e;}
+        await persist();
+        await schedule();
         return json(res,200,publicState());
       }catch{return json(res,400,{error:'Kayıt işlenemedi.'});}
     });return;
   }
   if(pathname==='/api/site-audit'){
     if(req.method!=='POST'||req.headers['x-temmuz-client']!=='operations-v12')return json(res,403,{error:'İstek kaynağı reddedildi'});
-    try{await runAudit();return json(res,200,publicState());}catch{return json(res,500,{error:'Kontrol kaydedilemedi.'});}
+    try{await runAudit(new URL(req.url,'http://localhost').searchParams.get('refresh')==='1');return json(res,200,publicState());}catch{return json(res,500,{error:'Site taraması kaydedilemedi.'});}
   }
   if(!['GET','HEAD'].includes(req.method))return json(res,405,{error:'Yöntem desteklenmiyor'});
   if(pathname==='/')pathname='/temmuz_jarvis_v12_operations.html';
@@ -98,7 +118,7 @@ const server=http.createServer(async(req,res)=>{
   });
 });
 server.on('error',e=>{console.error(e.message);process.exitCode=1;clearInterval(timer);});
-server.listen(port,host,()=>{schedule().catch(e=>console.error('Schedule:',e.message));console.log(`TemmuzOnline: http://localhost:${port}/temmuz_jarvis_v12_operations.html`);});
+storageReady.then(()=>{persist().then(()=>schedule()).catch(e=>console.error('Startup:',e.message));server.listen(port,host,()=>console.log(`TemmuzOnline: http://localhost:${port}/temmuz_jarvis_v12_operations.html`));}).catch(e=>{console.error(e.message);process.exitCode=1;});
 const timer=setInterval(()=>{schedule().catch(e=>console.error('Schedule:',e.message));},15000);
 function close(){clearInterval(timer);server.close();}
 process.on('SIGTERM',close);process.on('SIGINT',close);
