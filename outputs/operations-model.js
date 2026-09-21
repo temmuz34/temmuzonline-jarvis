@@ -24,12 +24,15 @@
   const currency=n=>new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:0}).format(n);
   const totals=()=>({revenue:channels.reduce((s,c)=>s+c.revenue,0),orders:channels.reduce((s,c)=>s+c.orders,0)});
   const normalize=s=>String(s).toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i');
-  function initial(){return {version:12,experts:[...templates,...G.roles].map(([id,name,role,task,color])=>({id,name,role,task,color,note:'',active:true})),settings:{enabled:true,times:['08:00','13:00'],speech:true},growth:G.initial(),reports:[],briefs:[],messages:[]};}
+  function initial(){return {version:12,experts:[...templates,...G.roles].map(([id,name,role,task,color])=>({id,name,role,task,color,note:'',active:true})),settings:{enabled:true,times:['08:00','13:00'],speech:true,wakeWord:false},growth:G.initial(),reports:[],briefs:[],messages:[]};}
   function validTimes(times){return Array.isArray(times)&&times.length===2&&times.every(t=>/^([01]\d|2[0-3]):[0-5]\d$/.test(t))&&times[0]!==times[1];}
   function hydrate(raw){
     const state=initial();if(!raw||raw.version!==12)return state;
+    // Business state is JSON-compatible; keep it during browser hydration too.
+    // The server applies the stricter business-engine validation before persistence.
+    if(raw.business&&typeof raw.business==='object')state.business=JSON.parse(JSON.stringify(raw.business));
     if(Array.isArray(raw.experts))state.experts=raw.experts.filter(e=>e&&typeof e.id==='string'&&typeof e.name==='string'&&typeof e.role==='string').map(e=>({...e,task:String(e.task||''),note:String(e.note||''),active:e.active!==false,color:/^#[0-9a-f]{6}$/i.test(e.color)?e.color:'#35cfee'}));
-    if(raw.settings){state.settings.enabled=raw.settings.enabled!==false;state.settings.speech=raw.settings.speech===true;if(validTimes(raw.settings.times))state.settings.times=[...raw.settings.times].sort();}
+    if(raw.settings){state.settings.enabled=raw.settings.enabled!==false;state.settings.speech=raw.settings.speech===true;state.settings.wakeWord=raw.settings.wakeWord===true;if(validTimes(raw.settings.times))state.settings.times=[...raw.settings.times].sort();}
     state.growth=G.hydrate(raw.growth);
     if(!raw.growth){for(const [id,name,role,task,color] of G.roles)if(!state.experts.some(e=>e.id===id))state.experts.push({id,name,role,task,color,note:'',active:true});}
     if(Array.isArray(raw.reports))state.reports=raw.reports.filter(r=>r&&typeof r.id==='string'&&Array.isArray(r.entries)&&r.sales&&Number.isFinite(Date.parse(r.createdAt))).slice(-60);

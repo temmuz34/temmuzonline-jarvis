@@ -80,7 +80,7 @@
     if(view==='settings')renderSettings();
     window.scrollTo({top:0,behavior:'auto'});
   }
-  function renderSettings(){state=read();$('schedule-enabled').checked=state.settings.enabled;$('morning-time').value=state.settings.times[0];$('afternoon-time').value=state.settings.times[1];$('speech-enabled').checked=state.settings.speech;updateSpeechButton();}
+  function renderSettings(){state=read();$('schedule-enabled').checked=state.settings.enabled;$('morning-time').value=state.settings.times[0];$('afternoon-time').value=state.settings.times[1];$('speech-enabled').checked=state.settings.speech;$('wake-enabled').checked=state.settings.wakeWord===true||state.business?.preferences?.wakeWord===true;updateSpeechButton();}
   function clock(){
     const now=Date.now();$('clock').textContent=new Intl.DateTimeFormat('tr-TR',{timeZone:'Europe/Istanbul',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(now);
     const next=M.nextSlot(state,now);$('next-report').textContent=next?`${M.localDay(now)===next.day?'Bugün':'Yarın'} / ${next.time}`:'Otomatik rapor kapalı';
@@ -118,14 +118,17 @@
     $('conversation').scrollTop=$('conversation').scrollHeight;
   }
   function stopSpeaking(){speakingToken++;if(window.speechSynthesis)window.speechSynthesis.cancel();}
-  function speak(text){
-    if(!state.settings.speech||!window.speechSynthesis||!window.SpeechSynthesisUtterance)return;
-    stopSpeaking();const token=speakingToken;const chunks=text.match(/[^.!?\n]+[.!?]?/g)||[text];let index=0;
-    function next(){if(token!==speakingToken||index>=chunks.length)return;const u=new SpeechSynthesisUtterance(chunks[index++]);u.lang='tr-TR';u.rate=1;const voice=speechSynthesis.getVoices().find(v=>v.lang.toLowerCase().startsWith('tr'));if(voice)u.voice=voice;u.onend=next;u.onerror=()=>{$('voice-status').textContent='Sesli yanıt oynatılamadı. Yanıt sohbet alanında.';};speechSynthesis.speak(u);}
+  async function speak(text){
+    if(window.JarvisVoice&&state.settings.speech){try{await window.JarvisVoice.speak(text,async(route,input)=>{const r=await fetch('/api/business/'+route,{method:'POST',headers:{'Content-Type':'application/json','X-Temmuz-Client':'operations-v12'},body:JSON.stringify(input)});const d=await r.json();if(!r.ok)throw new Error(d.error||'TTS unavailable');return d;},m=>$('voice-status').textContent=m);return;}catch{}}
+    if(!state.settings.speech||!window.speechSynthesis||!window.SpeechSynthesisUtterance){window.dispatchEvent(new CustomEvent('jarvis-state',{detail:{state:'IDLE'}}));return;}
+    stopSpeaking();window.dispatchEvent(new CustomEvent('jarvis-state',{detail:{state:'SPEAKING'}}));const token=speakingToken;const chunks=text.match(/[^.!?\n]+[.!?]?/g)||[text];let index=0;
+    function next(){if(token!==speakingToken||index>=chunks.length){if(token===speakingToken)window.dispatchEvent(new CustomEvent('jarvis-state',{detail:{state:'IDLE'}}));return;}const u=new SpeechSynthesisUtterance(chunks[index++]);u.lang='tr-TR';u.rate=1;const voice=speechSynthesis.getVoices().find(v=>v.lang.toLowerCase().startsWith('tr'));if(voice)u.voice=voice;u.onend=next;u.onerror=()=>{window.dispatchEvent(new CustomEvent('jarvis-state',{detail:{state:'IDLE'}}));$('voice-status').textContent='Sesli yanıt oynatılamadı. Yanıt sohbet alanında.';};speechSynthesis.speak(u);}
     next();
   }
   async function answer(text){
     const q=M.normalize(text);state=read();const {revenue,orders}=M.totals();
+    window.dispatchEvent(new CustomEvent('jarvis-state',{detail:{state:'THINKING'}}));
+    try{const response=await fetch('/api/business/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Temmuz-Client':'operations-v12'},body:JSON.stringify({text,threadId:sessionStorage.getItem('jarvis-main-thread'),context:{kind:'Dashboard'}}),signal:AbortSignal.timeout(12000)});const result=await response.json();if(response.ok&&!result.setupRequired&&typeof result.text==='string'&&result.text.trim()){sessionStorage.setItem('jarvis-main-thread',result.threadId);return result.text.trim();}}catch{}
     const intent=window.JarvisRouter.route(text);
     if(intent.kind==='sales')return answer('satış özeti');
     if(intent.kind==='ads')return 'Google Ads ve Meta reklam hesabı bağlı değil. Doğrulanmış harcama, ROAS veya reklam sonucu henüz alınamadı.';
@@ -157,11 +160,16 @@
     if(q.includes('ekip')||q.includes('uzman'))return `Konseyde ${state.experts.length} uzman var; ${state.experts.filter(e=>e.active).length} uzman rapora dahil.\n${state.experts.map(e=>`${e.name}: ${e.role}`).join('\n')}`;
     if(/reddet|red ver|onayla/.test(q))return 'Bu sürümde bekleyen bir işlem veya bağlı reklam hesabı yok. Herhangi bir bütçe değişikliği yapmadım.';
     if(/merhaba|selam|hazir misin/.test(q))return 'Merhaba TemmuzOnline. Hazırım. Satış özetini, konsey raporlarını ve ekip notlarını konuşabiliriz.';
-    return 'Şu an satış özeti, ekip notları ve rapor komutlarıyla çalışıyorum. Serbest yapay zekâ sohbeti için bir model servisi bağlantısı gerekli. Örneğin “Tüm ekip rapor versin” veya “Mira son durum” diyebilirsin.';
+    const response=await fetch('/api/business/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Temmuz-Client':'operations-v12'},body:JSON.stringify({text,threadId:sessionStorage.getItem('jarvis-main-thread'),context:{kind:'Dashboard'}})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Jarvis yanıt veremedi.');if(typeof result.text!=='string'||!result.text.trim())throw new Error('Jarvis boş yanıt döndürdü.');sessionStorage.setItem('jarvis-main-thread',result.threadId);return result.text.trim();
   }
-  async function submit(text){text=String(text||'').trim().slice(0,1200);if(!text)return;addMessage(text,'user');$('chat-input').value='';try{const response=await answer(text);addMessage(response);speak(response);}catch(error){addMessage(`İşlem tamamlanamadı: ${error.message}`);}}
-  function voiceState(mode,message){voiceMode=mode;document.body.dataset.voice=mode;$('voice-label').textContent=mode==='listening'?'DİNLİYOR':mode==='starting'?'MİKROFON':'HAZIR';if(message)$('voice-status').textContent=message;const active=['starting','listening'].includes(mode);$('face-talk').setAttribute('aria-pressed',String(active));$('mic-button').setAttribute('aria-pressed',String(active));$('mic-button').setAttribute('aria-label',active?'Mikrofonu durdur':'Mikrofonu aç');}
+  function armWakeWord(delay=420){if(!window.JarvisVoice||state.settings.wakeWord!==true||document.hidden)return;setTimeout(()=>{if(window.JarvisVoice.isListening?.())return;voiceState('starting','Jarvis çağrısı için mikrofon hazırlanıyor…');window.JarvisVoice.listen(text=>{voiceState('idle','Mesaj alındı.');submit(text);},message=>{$('voice-status').textContent=message;},true);},delay);}
+  async function submit(text){text=String(text||'').trim().slice(0,1200);if(!text)return;addMessage(text,'user');$('chat-input').value='';try{const response=await answer(text);addMessage(response);await speak(response);if(!state.settings.speech)window.dispatchEvent(new CustomEvent('jarvis-state',{detail:{state:'IDLE'}}));}catch(error){window.dispatchEvent(new CustomEvent('jarvis-state',{detail:{state:'ERROR'}}));addMessage(`İşlem tamamlanamadı: ${error.message}`);}finally{armWakeWord();}}
+  function voiceState(mode,message){voiceMode=mode;document.body.dataset.voice=mode;$('voice-label').textContent=mode==='listening'?'DİNLİYOR':mode==='starting'?'MİKROFON':mode==='waiting'?'JARVIS BEKLİYOR':mode==='speaking'?'KONUŞUYOR':mode==='thinking'?'DÜŞÜNÜYOR':mode==='error'?'UYARI':'HAZIR';if(message)$('voice-status').textContent=message;const active=['starting','listening','waiting'].includes(mode);$('face-talk').setAttribute('aria-pressed',String(active));$('mic-button').setAttribute('aria-pressed',String(active));$('mic-button').setAttribute('aria-label',active?'Mikrofonu durdur':'Mikrofonu aç');}
   function toggleMicrophone(){
+    if(window.JarvisVoice){
+      if(['starting','listening'].includes(voiceMode)){window.JarvisVoice.stop();voiceState('idle','Dinleme durduruldu.');return;}
+      voiceState('starting','Mikrofon izni bekleniyor…');window.JarvisVoice.listen(text=>{voiceState('idle','Mesaj alındı.');submit(text);},message=>{$('voice-status').textContent=message;},state.settings.wakeWord===true);return;
+    }
     stopSpeaking();
     if(['starting','listening'].includes(voiceMode)){clearTimeout(voiceTimeout);recognition?.stop();voiceState('idle','Dinleme durduruldu.');return;}
     const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -181,8 +189,9 @@
     }catch{voiceState('error','Mikrofon başlatılamadı. Tarayıcı izinlerini kontrol et.');}
   }
   function updateSpeechButton(){const enabled=state.settings.speech;$('voice-output').setAttribute('aria-pressed',String(enabled));$('voice-output').innerHTML=`<i data-lucide="${enabled?'volume-2':'volume-x'}">♪</i>`;icons();}
-  function placeFace(){const canvas=$('aiHumanoid'),w=canvas.clientWidth,h=canvas.clientHeight,s=Math.min(w/1000,h/1000);const face=$('face-talk');Object.assign(face.style,{left:`${(w-1000*s)/2+345*s}px`,top:`${(h-1000*s)/2+190*s}px`,width:`${310*s}px`,height:`${380*s}px`});document.documentElement.style.scrollPaddingTop='0px';}
+  function placeFace(){const canvas=$('jarvis-orb');if(!canvas)return;const w=canvas.clientWidth,h=canvas.clientHeight,d=Math.min(w,h)*.58;const face=$('face-talk');Object.assign(face.style,{left:`${(w-d)/2}px`,top:`${(h-d)/2}px`,width:`${d}px`,height:`${d}px`});document.documentElement.style.scrollPaddingTop='0px';}
   document.addEventListener('click',e=>{const view=e.target.closest('[data-view]');if(view)switchView(view.dataset.view);const expert=e.target.closest('[data-expert]');if(expert)openExpert(expert.dataset.expert);const report=e.target.closest('[data-report]');if(report){selectedReport=report.dataset.report;renderReports();}const quick=e.target.closest('[data-command]');if(quick)submit(quick.dataset.command);});
+  window.addEventListener('jarvis-state',e=>{const v=String(e.detail?.state||'IDLE').toUpperCase();const map={WAITING_WAKE_WORD:'waiting',LISTENING:'listening',THINKING:'thinking',SPEAKING:'speaking',ERROR:'error',IDLE:'idle'};if(map[v])voiceState(map[v]);});
   $('chat-form').addEventListener('submit',e=>{e.preventDefault();submit($('chat-input').value);});
   $('face-talk').onclick=toggleMicrophone;$('mic-button').onclick=toggleMicrophone;
   $('voice-output').onclick=()=>{change(s=>s.settings.speech=!s.settings.speech);if(!state.settings.speech)stopSpeaking();updateSpeechButton();toast(state.settings.speech?'Sesli yanıt açık.':'Sesli yanıt kapalı.');};
@@ -191,7 +200,7 @@
   $('delete-expert').onclick=()=>$('delete-confirm').hidden=false;
   $('confirm-delete').onclick=()=>{const id=$('expert-id').value;change(s=>s.experts=s.experts.filter(e=>e.id!==id));$('expert-dialog').close();refresh();toast('Uzman ekipten kaldırıldı.');};
   $('expert-form').onsubmit=e=>{e.preventDefault();const name=$('expert-name').value.trim(),role=$('expert-role').value.trim(),task=$('expert-task').value.trim();if(!name||!role||!task){$('expert-error').textContent='İsim, uzmanlık ve sorumluluk boş olamaz.';return;}change(s=>{const existing=s.experts.find(x=>x.id===$('expert-id').value);const item={id:existing?.id||crypto.randomUUID(),name,role,task,note:$('expert-note').value.trim(),active:$('expert-active').checked,color:existing?.color||'#35cfee'};if(existing)Object.assign(existing,item);else s.experts.push(item);});$('expert-dialog').close();refresh();toast('Uzman bilgileri kaydedildi.');};
-  $('settings-form').onsubmit=e=>{e.preventDefault();const times=[$('morning-time').value,$('afternoon-time').value];if(!M.validTimes(times)){$('settings-error').textContent='İki farklı, geçerli rapor saati seç.';return;}$('settings-error').textContent='';change(s=>s.settings={enabled:$('schedule-enabled').checked,times:times.sort(),speech:$('speech-enabled').checked});if(!state.settings.speech)stopSpeaking();refresh();updateSpeechButton();scheduledRun();toast('Rapor ve ses ayarları kaydedildi.');};
+  $('settings-form').onsubmit=e=>{e.preventDefault();const times=[$('morning-time').value,$('afternoon-time').value];if(!M.validTimes(times)){$('settings-error').textContent='İki farklı, geçerli rapor saati seç.';return;}$('settings-error').textContent='';change(s=>{s.settings={...s.settings,enabled:$('schedule-enabled').checked,times:times.sort(),speech:$('speech-enabled').checked,wakeWord:$('wake-enabled').checked};s.business=s.business||{preferences:{}};s.business.preferences=s.business.preferences||{};s.business.preferences.wakeWord=s.settings.wakeWord;});if(!state.settings.speech)stopSpeaking();refresh();updateSpeechButton();scheduledRun();toast('Rapor ve ses ayarları kaydedildi.');};
   $('download-report').onclick=()=>{const r=read().reports.find(x=>x.id===selectedReport);if(!r)return;const body=`TEMMUZONLINE / ${r.title}\n${dateLabel(r.createdAt)}\nÖrnek satış verisi ve kayıtlı ekip notları.\n\n${reportSummary(r)}\n\n${r.entries.map(e=>`${e.name} / ${e.role}\n${e.text}\nKaynak: ${e.source}`).join('\n\n')}`;const url=URL.createObjectURL(new Blob(['\ufeff'+body],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=`temmuz-rapor-${M.localDay(Date.parse(r.createdAt))}.txt`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
   window.addEventListener('storage',e=>{if(e.key===KEY){refresh();renderMessages();if(selectedView==='settings'&&!$('settings-form').contains(document.activeElement))renderSettings();}});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){refresh();scheduledRun();}});
@@ -210,6 +219,7 @@
   document.body.dataset.currentView='overview';
   if(!state.messages.length)addMessage('Merhaba TemmuzOnline. Satış özetini, ekip notlarını ve konsey raporlarını burada konuşabiliriz. Satış verileri şu an örnek; canlı servis bağlantısı yok.');
   refresh();renderMessages();renderSettings();
+  if((state.settings.wakeWord===true||state.business?.preferences?.wakeWord===true)&&navigator.permissions?.query){navigator.permissions.query({name:'microphone'}).then(p=>{if(p.state==='granted'&&!document.hidden)armWakeWord(180);}).catch(()=>{});}
   if(!(window.SpeechRecognition||window.webkitSpeechRecognition))$('voice-status').textContent='Ses tanıma bu tarayıcıda yok. Mikrofon için Chrome veya Edge kullan.';
   if(!window.speechSynthesis){$('voice-output').disabled=true;$('voice-output').title='Bu tarayıcı sesli yanıtı desteklemiyor';}
   new ResizeObserver(placeFace).observe($('scene-shell'));placeFace();scheduledRun();setInterval(clock,1000);setInterval(scheduledRun,15000);

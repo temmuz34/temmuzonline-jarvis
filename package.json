@@ -1,6 +1,6 @@
 {
   "name": "temmuzonline-jarvis-v12",
-  "version": "14.0.0",
+  "version": "15.0.0",
   "private": true,
   "engines": {
     "node": ">=22"
@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node outputs/operations-server.cjs",
     "migrate:storage": "node outputs/migrate-storage.cjs",
-    "test": "node tests/services.cjs && node tests/v14.cjs && node tests/council.cjs && node tests/server.cjs"
+    "test": "node tests/services.cjs && node tests/v14.cjs && node tests/council.cjs && node tests/business.cjs && node tests/server.cjs"
   },
   "dependencies": {
     "cheerio": "1.1.2",
