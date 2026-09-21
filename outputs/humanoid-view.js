@@ -7,7 +7,43 @@ const ASSEMBLY_MS=6000;
 const SHOCK_MS=2500;
 const FIGURE_SRC='assets/artwork-candidates/humanoid-figure-transparent.webp';
 const BACKDROP_SRC='assets/artwork-candidates/mountains.webp';
-const VERSION='15.0';
+const VERSION='15.2';
+const AssemblySfx=(()=>{
+  let ctx=null,nodes=[],unlocked=false;
+  const ensure=()=>{if(!ctx)ctx=new (window.AudioContext||window.webkitAudioContext)();return ctx;};
+  const unlock=()=>{try{const a=ensure();a.resume?.();unlocked=true;}catch{}};
+  addEventListener('pointerdown',unlock,{capture:true,once:true});
+  addEventListener('keydown',unlock,{capture:true,once:true});
+  const stop=()=>{for(const n of nodes){try{n.stop?.();}catch{}try{n.disconnect?.();}catch{}}nodes=[];};
+  const play=()=>{
+    if(!unlocked)return;
+    let a;try{a=ensure();a.resume?.();}catch{return;}
+    stop();
+    const now=a.currentTime,d=6.0,master=a.createGain();
+    master.gain.setValueAtTime(.0001,now);
+    master.gain.exponentialRampToValueAtTime(.22,now+.22);
+    master.gain.setValueAtTime(.18,now+4.9);
+    master.gain.exponentialRampToValueAtTime(.0001,now+d);
+    master.connect(a.destination);nodes.push(master);
+
+    const noiseBuf=a.createBuffer(1,Math.floor(a.sampleRate*d),a.sampleRate),ch=noiseBuf.getChannelData(0);
+    for(let i=0;i<ch.length;i++){const t=i/ch.length;ch[i]=(Math.random()*2-1)*(.35+.65*Math.sin(Math.PI*t));}
+    const noise=a.createBufferSource();noise.buffer=noiseBuf;
+    const bp=a.createBiquadFilter();bp.type='bandpass';bp.frequency.setValueAtTime(420,now);bp.frequency.exponentialRampToValueAtTime(2600,now+5.5);bp.Q.value=.7;
+    const ng=a.createGain();ng.gain.setValueAtTime(.02,now);ng.gain.linearRampToValueAtTime(.14,now+4.8);ng.gain.exponentialRampToValueAtTime(.0001,now+d);
+    noise.connect(bp);bp.connect(ng);ng.connect(master);noise.start(now);noise.stop(now+d);nodes.push(noise,bp,ng);
+
+    const o1=a.createOscillator(),g1=a.createGain();o1.type='sine';o1.frequency.setValueAtTime(110,now);o1.frequency.exponentialRampToValueAtTime(420,now+5.7);
+    g1.gain.setValueAtTime(.0001,now);g1.gain.exponentialRampToValueAtTime(.12,now+.5);g1.gain.linearRampToValueAtTime(.055,now+4.9);g1.gain.exponentialRampToValueAtTime(.0001,now+d);
+    o1.connect(g1);g1.connect(master);o1.start(now);o1.stop(now+d);nodes.push(o1,g1);
+
+    const o2=a.createOscillator(),g2=a.createGain();o2.type='triangle';o2.frequency.setValueAtTime(760,now+4.6);o2.frequency.exponentialRampToValueAtTime(1850,now+5.85);
+    g2.gain.setValueAtTime(.0001,now);g2.gain.setValueAtTime(.0001,now+4.45);g2.gain.exponentialRampToValueAtTime(.09,now+5.35);g2.gain.exponentialRampToValueAtTime(.0001,now+d);
+    o2.connect(g2);g2.connect(master);o2.start(now);o2.stop(now+d);nodes.push(o2,g2);
+  };
+  return {play,stop,unlock:()=>unlock(),get unlocked(){return unlocked;}};
+})();
+
 
 class ArtworkHumanoidEngine{
   constructor({container,canvas,backdrop,label,mode='fullscreen'}){
@@ -68,18 +104,18 @@ class ArtworkHumanoidEngine{
     const r=this.container.getBoundingClientRect();this.w=Math.max(1,r.width);this.h=Math.max(1,r.height);this.dpr=Math.min(devicePixelRatio||1,this.mode==='inline'?1.5:1.75);
     this.canvas.width=Math.round(this.w*this.dpr);this.canvas.height=Math.round(this.h*this.dpr);this.canvas.style.width=this.w+'px';this.canvas.style.height=this.h+'px';
     this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
-    const widthRatio=this.mode==='inline'?.92:.58;const heightRatio=this.mode==='inline'?.90:.78;
+    const widthRatio=this.mode==='inline'?.84:.58;const heightRatio=this.mode==='inline'?.78:.78;
     const s=Math.min((this.w*widthRatio)/640,(this.h*heightRatio)/400);
-    const fw=640*s,fh=400*s;const cx=this.w*.5;const cy=this.mode==='inline'?this.h*.51:this.h*.52;
+    const fw=640*s,fh=400*s;const cx=this.w*.5;const cy=this.mode==='inline'?this.h*.50:this.h*.52;
     this.rect={x:cx-fw/2,y:cy-fh/2,w:fw,h:fh,s};
   }
   setState(s){this.state=String(s||'IDLE').toUpperCase();}
   setLevel(v){this.level=clamp(Number(v)||0);this.lastLevelAt=performance.now();}
   setEffects(v){this.effects=!!v;if(!this.effects){this.cancel(true);this.targetYaw=this.yaw=0;this.targetPitch=this.pitch=0;}}
   setReduced(v){this.reduced=!!v;if(this.reduced)this.cancel(true);}
-  replay(){if(!this.loaded){this.pendingReplay=true;return;}this.pendingReplay=false;if(this.reduced||!this.effects){this.cancel(true);return;}this.assemblyActive=true;this.assemblyStart=performance.now();this.shockActive=false;this.targetYaw=this.yaw=0;this.targetPitch=this.pitch=0;if(this.label){this.label.textContent='ASSEMBLY // 0%';this.label.classList.add('show');}if(this.backdrop)this.backdrop.style.opacity=this.mode==='inline'?'.24':'.18';}
+  replay(){if(!this.loaded){this.pendingReplay=true;return;}this.pendingReplay=false;if(this.reduced||!this.effects){this.cancel(true);return;}this.assemblyActive=true;this.assemblyStart=performance.now();this.shockActive=false;this.targetYaw=this.yaw=0;this.targetPitch=this.pitch=0;if(this.label){this.label.textContent='ASSEMBLY // 0%';this.label.classList.add('show');}if(this.backdrop)this.backdrop.style.opacity=this.mode==='inline'?'.24':'.18';AssemblySfx.play();}
   skip(){this.cancel(true);}
-  cancel(toIdle=false){this.pendingReplay=false;this.assemblyActive=false;this.shockActive=false;if(this.label)this.label.classList.remove('show');if(this.backdrop)this.backdrop.style.opacity=this.mode==='inline'?'.58':'.64';if(toIdle)this.setState('IDLE');}
+  cancel(toIdle=false){this.pendingReplay=false;this.assemblyActive=false;this.shockActive=false;AssemblySfx.stop();if(this.label)this.label.classList.remove('show');if(this.backdrop)this.backdrop.style.opacity=this.mode==='inline'?'.58':'.64';if(toIdle)this.setState('IDLE');}
   pointer(e){if(this.reduced||!this.effects||this.assemblyActive||this.shockActive)return;const r=this.container.getBoundingClientRect();const px=e.clientX-r.left,py=e.clientY-r.top;const hx=this.mapX(320),hy=this.mapY(170),hw=this.rect.s*120,hh=this.rect.s*150;const inside=px>=hx-hw&&px<=hx+hw&&py>=hy-hh&&py<=hy+hh;if(!inside){this.targetYaw=0;this.targetPitch=0;return;}const nx=clamp((px-hx)/hw,-1,1),ny=clamp((py-hy)/hh,-1,1);this.targetYaw=nx*20;this.targetPitch=ny*-5;this.lastPointerAt=performance.now();}
   mapX(x){return this.rect.x+x*this.rect.s}mapY(y){return this.rect.y+y*this.rect.s}
   drawStaticFigure(alpha=1){const c=this.ctx;c.save();c.globalAlpha=alpha;const breath=(!this.reduced&&this.effects)?1+Math.sin(performance.now()*.00108)*.0045:1;const h=this.rect.h*breath,y=this.rect.y-(h-this.rect.h)*.36;c.drawImage(this.figure,this.rect.x,y,this.rect.w,h);c.restore();}
@@ -88,76 +124,64 @@ class ArtworkHumanoidEngine{
     const c=this.ctx,maxAngle=20,ang=this.yaw*Math.PI/180,abs=Math.min(1,Math.abs(this.yaw)/maxAngle);
     this.drawBodyOnly();
 
-    // Keep the approved front artwork visible through the turn.
-    // The head image itself is perspective-compressed, while sampled tiles add depth/detail.
-    const cx=320,cy=170,rx=82,ry=116,depth=52;
-    const headCX=this.mapX(cx),headCY=this.mapY(cy);
-    const scaleX=Math.max(.70,Math.cos(ang)*.98);
-    const shiftX=Math.sin(ang)*this.rect.s*depth*.42;
+    // Rotate around the lower neck instead of the face center so the head never detaches.
+    const cx=320,cy=170,rx=82,ry=116,depth=46,pivotY=258;
+    const pivotX=this.mapX(cx),pivotScreenY=this.mapY(pivotY);
+    const scaleX=Math.max(.78,Math.cos(ang)*.995);
 
     c.save();
-    c.translate(headCX+shiftX,headCY+this.pitch*.20);
+    c.translate(pivotX,pivotScreenY+this.pitch*.14);
     c.scale(scaleX,1);
+
+    // Head + upper-neck clip keeps a continuous silhouette with the torso.
     c.beginPath();
-    c.ellipse(0,0,this.rect.s*rx,this.rect.s*ry,0,0,Math.PI*2);
+    c.ellipse(0,this.rect.s*(cy-pivotY),this.rect.s*rx,this.rect.s*ry,0,0,Math.PI*2);
+    c.moveTo(-this.rect.s*42,this.rect.s*(224-pivotY));
+    c.lineTo(this.rect.s*42,this.rect.s*(224-pivotY));
+    c.lineTo(this.rect.s*31,this.rect.s*(292-pivotY));
+    c.lineTo(-this.rect.s*31,this.rect.s*(292-pivotY));
+    c.closePath();
     c.clip();
+
     c.drawImage(
       this.figure,
-      cx-rx,cy-ry,rx*2,ry*2,
-      -this.rect.s*rx,-this.rect.s*ry,this.rect.s*rx*2,this.rect.s*ry*2
+      218,44,204,252,
+      this.rect.s*(218-cx),this.rect.s*(44-pivotY),this.rect.s*204,this.rect.s*252
     );
 
-    // Clean far-side shadow rather than erasing detail.
     if(abs>.02){
       const side=this.yaw>=0?1:-1;
-      const x0=-this.rect.s*rx,x1=this.rect.s*rx;
+      const x0=-this.rect.s*102,x1=this.rect.s*102;
       const g=c.createLinearGradient(side>0?x0:x1,0,side>0?x1:x0,0);
-      g.addColorStop(0,'rgba(0,0,0,.02)');
-      g.addColorStop(.52,`rgba(0,0,0,${.05+abs*.08})`);
-      g.addColorStop(1,`rgba(0,0,0,${.18+abs*.24})`);
+      g.addColorStop(0,'rgba(0,0,0,.01)');
+      g.addColorStop(.58,`rgba(0,0,0,${.035+abs*.06})`);
+      g.addColorStop(1,`rgba(0,0,0,${.13+abs*.18})`);
       c.fillStyle=g;
-      c.fillRect(x0,-this.rect.s*ry,this.rect.s*rx*2,this.rect.s*ry*2);
+      c.fillRect(x0,this.rect.s*(38-pivotY),x1-x0,this.rect.s*270);
     }
     c.restore();
 
-    // Depth tiles preserve local artwork patches and slightly grow to cover rotation gaps.
-    const cos=Math.cos(ang),sin=Math.sin(ang);
-    const pointSize=Math.max(1.0,this.rect.s*(1.12+abs*.20));
-    c.save();
-    c.globalCompositeOperation='source-over';
-    c.globalAlpha=.22;
+    // Subtle artwork-sampled depth. It supports the image instead of replacing it.
+    const cos=Math.cos(ang),sin=Math.sin(ang),pointSize=Math.max(1,this.rect.s*(1.04+abs*.14));
+    c.save();c.globalCompositeOperation='source-over';c.globalAlpha=.12;
     for(const p of this.headPoints){
-      const dx=p.x-cx,nx=dx/rx;
-      const nz=Math.sqrt(Math.max(0,1-nx*nx));
-      const z=nz*depth;
-      const rdx=dx*cos+z*sin;
-      const rz=-dx*sin+z*cos;
-      const normalZ=nz*cos-nx*sin;
-      if(normalZ<-.28)continue;
-      const shade=clamp(.30+.70*((normalZ+0.28)/1.28),.30,1);
-      const px=this.mapX(cx+rdx)+shiftX*.12;
-      const py=this.mapY(p.y+this.pitch*.22);
-      const alpha=clamp(p.a*(.34+.66*shade),.16,1);
-      c.fillStyle=`rgba(${Math.round(p.r*shade)},${Math.round(p.g*shade)},${Math.round(p.b*shade)},${alpha})`;
+      const dx=p.x-cx,nx=dx/rx,nz=Math.sqrt(Math.max(0,1-nx*nx)),z=nz*depth;
+      const rdx=dx*cos+z*sin,normalZ=nz*cos-nx*sin;
+      if(normalZ<-.35)continue;
+      const shade=clamp(.42+.58*((normalZ+.35)/1.35),.42,1);
+      const px=this.mapX(cx+rdx),py=this.mapY(p.y+this.pitch*.16);
+      c.fillStyle=`rgba(${Math.round(p.r*shade)},${Math.round(p.g*shade)},${Math.round(p.b*shade)},${clamp(p.a*.58,.12,.58)})`;
       c.fillRect(px-pointSize*.5,py-pointSize*.5,pointSize,pointSize);
     }
     c.restore();
 
-    // Bright leading profile line.
-    if(abs>.04){
+    if(abs>.045){
       const side=this.yaw>=0?1:-1;
-      const px=this.mapX(cx)+shiftX+side*(this.rect.s*rx*scaleX*.96);
-      const py=this.mapY(cy);
-      c.save();
-      c.globalCompositeOperation='lighter';
-      c.strokeStyle=`rgba(83,237,255,${.20+abs*.60})`;
-      c.lineWidth=Math.max(1,this.rect.s*(1.15+abs*.65));
-      c.shadowBlur=10+abs*18;
-      c.shadowColor='#47eaff';
-      c.beginPath();
-      c.ellipse(px,py,Math.max(3,this.rect.s*5.5),this.rect.s*ry*.92,0,-Math.PI/2,Math.PI/2);
-      c.stroke();
-      c.restore();
+      const px=this.mapX(cx)+side*(this.rect.s*rx*scaleX*.97),py=this.mapY(cy);
+      c.save();c.globalCompositeOperation='lighter';
+      c.strokeStyle=`rgba(83,237,255,${.18+abs*.52})`;c.lineWidth=Math.max(1,this.rect.s*(1.05+abs*.5));
+      c.shadowBlur=9+abs*14;c.shadowColor='#47eaff';
+      c.beginPath();c.ellipse(px,py,Math.max(2.5,this.rect.s*4.5),this.rect.s*ry*.90,0,-Math.PI/2,Math.PI/2);c.stroke();c.restore();
     }
   }
   drawIdleOrTurn(){
