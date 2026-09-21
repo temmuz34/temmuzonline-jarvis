@@ -87,13 +87,78 @@ class ArtworkHumanoidEngine{
   drawHeadTurn(){
     const c=this.ctx,maxAngle=26,ang=this.yaw*Math.PI/180,abs=Math.min(1,Math.abs(this.yaw)/maxAngle);
     this.drawBodyOnly();
-    const cx=320,cy=170,rx=82,depth=52;const cos=Math.cos(ang),sin=Math.sin(ang);const pointSize=Math.max(1.0,this.rect.s*(1.15+abs*.38));
-    c.save();c.globalCompositeOperation='lighter';
-    for(const p of this.headPoints){const dx=p.x-cx,nx=dx/rx;const nz=Math.sqrt(Math.max(0,1-nx*nx));const z=nz*depth;const rdx=dx*cos+z*sin;const rz=-dx*sin+z*cos;const normalZ=nz*cos-nx*sin; if(normalZ<.08)continue;const shade=clamp((normalZ-.04)/.96,.08,1);const px=this.mapX(cx+rdx),py=this.mapY(p.y+this.pitch*.22);const a=p.a*shade*(.82+.18*(rz/depth));c.fillStyle=`rgba(${Math.round(p.r*shade)},${Math.round(p.g*shade)},${Math.round(p.b*shade)},${clamp(a,0,1)})`;c.fillRect(px-pointSize*.5,py-pointSize*.5,pointSize,pointSize);}
+
+    // Keep the approved front artwork visible through the turn.
+    // The head image itself is perspective-compressed, while sampled tiles add depth/detail.
+    const cx=320,cy=170,rx=82,ry=116,depth=52;
+    const headCX=this.mapX(cx),headCY=this.mapY(cy);
+    const scaleX=Math.max(.70,Math.cos(ang)*.98);
+    const shiftX=Math.sin(ang)*this.rect.s*depth*.42;
+
+    c.save();
+    c.translate(headCX+shiftX,headCY+this.pitch*.20);
+    c.scale(scaleX,1);
+    c.beginPath();
+    c.ellipse(0,0,this.rect.s*rx,this.rect.s*ry,0,0,Math.PI*2);
+    c.clip();
+    c.drawImage(
+      this.figure,
+      cx-rx,cy-ry,rx*2,ry*2,
+      -this.rect.s*rx,-this.rect.s*ry,this.rect.s*rx*2,this.rect.s*ry*2
+    );
+
+    // Clean far-side shadow rather than erasing detail.
+    if(abs>.02){
+      const side=this.yaw>=0?1:-1;
+      const x0=-this.rect.s*rx,x1=this.rect.s*rx;
+      const g=c.createLinearGradient(side>0?x0:x1,0,side>0?x1:x0,0);
+      g.addColorStop(0,'rgba(0,0,0,.02)');
+      g.addColorStop(.52,`rgba(0,0,0,${.05+abs*.08})`);
+      g.addColorStop(1,`rgba(0,0,0,${.30+abs*.34})`);
+      c.fillStyle=g;
+      c.fillRect(x0,-this.rect.s*ry,this.rect.s*rx*2,this.rect.s*ry*2);
+    }
     c.restore();
-    // clean glowing profile on the leading side, no compressed far-side detail
-    const side=this.yaw>=0?1:-1;const px=this.mapX(cx+side*(rx*.93+Math.sin(Math.abs(ang))*depth*.72));const py=this.mapY(cy);
-    c.save();c.globalCompositeOperation='lighter';c.strokeStyle=`rgba(83,237,255,${.24+abs*.58})`;c.lineWidth=Math.max(1,this.rect.s*(1.2+abs*.7));c.shadowBlur=12+abs*18;c.shadowColor='#47eaff';c.beginPath();c.ellipse(px,py,Math.max(3,this.rect.s*6),this.rect.s*104,0,side>0?-Math.PI/2:Math.PI/2,side>0?Math.PI/2:Math.PI*1.5);c.stroke();c.restore();
+
+    // Depth tiles preserve local artwork patches and slightly grow to cover rotation gaps.
+    const cos=Math.cos(ang),sin=Math.sin(ang);
+    const pointSize=Math.max(1.0,this.rect.s*(1.28+abs*.48));
+    c.save();
+    c.globalCompositeOperation='lighter';
+    c.globalAlpha=.58;
+    for(const p of this.headPoints){
+      const dx=p.x-cx,nx=dx/rx;
+      const nz=Math.sqrt(Math.max(0,1-nx*nx));
+      const z=nz*depth;
+      const rdx=dx*cos+z*sin;
+      const rz=-dx*sin+z*cos;
+      const normalZ=nz*cos-nx*sin;
+      if(normalZ<-.28)continue;
+      const shade=clamp(.30+.70*((normalZ+0.28)/1.28),.30,1);
+      const px=this.mapX(cx+rdx)+shiftX*.12;
+      const py=this.mapY(p.y+this.pitch*.22);
+      const alpha=clamp(p.a*(.34+.66*shade),.16,1);
+      c.fillStyle=`rgba(${Math.round(p.r*shade)},${Math.round(p.g*shade)},${Math.round(p.b*shade)},${alpha})`;
+      c.fillRect(px-pointSize*.5,py-pointSize*.5,pointSize,pointSize);
+    }
+    c.restore();
+
+    // Bright leading profile line.
+    if(abs>.04){
+      const side=this.yaw>=0?1:-1;
+      const px=this.mapX(cx)+shiftX+side*(this.rect.s*rx*scaleX*.96);
+      const py=this.mapY(cy);
+      c.save();
+      c.globalCompositeOperation='lighter';
+      c.strokeStyle=`rgba(83,237,255,${.20+abs*.60})`;
+      c.lineWidth=Math.max(1,this.rect.s*(1.15+abs*.65));
+      c.shadowBlur=10+abs*18;
+      c.shadowColor='#47eaff';
+      c.beginPath();
+      c.ellipse(px,py,Math.max(3,this.rect.s*5.5),this.rect.s*ry*.92,0,-Math.PI/2,Math.PI/2);
+      c.stroke();
+      c.restore();
+    }
   }
   drawIdleOrTurn(){
     if(this.reduced||!this.effects){this.drawStaticFigure(1);return;}
