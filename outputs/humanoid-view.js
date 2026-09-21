@@ -7,42 +7,19 @@ const ASSEMBLY_MS=6000;
 const SHOCK_MS=2500;
 const FIGURE_SRC='assets/artwork-candidates/humanoid-figure-transparent.webp';
 const BACKDROP_SRC='assets/artwork-candidates/mountains.webp';
-const VERSION='15.2';
+const ASSEMBLY_AUDIO_SRC='assets/audio/humanoid-demo-assembly.mp3';
+const VERSION='15.3';
 const AssemblySfx=(()=>{
-  let ctx=null,nodes=[],unlocked=false;
-  const ensure=()=>{if(!ctx)ctx=new (window.AudioContext||window.webkitAudioContext)();return ctx;};
-  const unlock=()=>{try{const a=ensure();a.resume?.();unlocked=true;}catch{}};
+  const audio=new Audio(ASSEMBLY_AUDIO_SRC);
+  audio.preload='auto';audio.volume=.88;
+  let unlocked=false;
+  const unlock=()=>{unlocked=true;try{audio.load();}catch{}};
   addEventListener('pointerdown',unlock,{capture:true,once:true});
   addEventListener('keydown',unlock,{capture:true,once:true});
-  const stop=()=>{for(const n of nodes){try{n.stop?.();}catch{}try{n.disconnect?.();}catch{}}nodes=[];};
-  const play=()=>{
-    if(!unlocked)return;
-    let a;try{a=ensure();a.resume?.();}catch{return;}
-    stop();
-    const now=a.currentTime,d=6.0,master=a.createGain();
-    master.gain.setValueAtTime(.0001,now);
-    master.gain.exponentialRampToValueAtTime(.22,now+.22);
-    master.gain.setValueAtTime(.18,now+4.9);
-    master.gain.exponentialRampToValueAtTime(.0001,now+d);
-    master.connect(a.destination);nodes.push(master);
-
-    const noiseBuf=a.createBuffer(1,Math.floor(a.sampleRate*d),a.sampleRate),ch=noiseBuf.getChannelData(0);
-    for(let i=0;i<ch.length;i++){const t=i/ch.length;ch[i]=(Math.random()*2-1)*(.35+.65*Math.sin(Math.PI*t));}
-    const noise=a.createBufferSource();noise.buffer=noiseBuf;
-    const bp=a.createBiquadFilter();bp.type='bandpass';bp.frequency.setValueAtTime(420,now);bp.frequency.exponentialRampToValueAtTime(2600,now+5.5);bp.Q.value=.7;
-    const ng=a.createGain();ng.gain.setValueAtTime(.02,now);ng.gain.linearRampToValueAtTime(.14,now+4.8);ng.gain.exponentialRampToValueAtTime(.0001,now+d);
-    noise.connect(bp);bp.connect(ng);ng.connect(master);noise.start(now);noise.stop(now+d);nodes.push(noise,bp,ng);
-
-    const o1=a.createOscillator(),g1=a.createGain();o1.type='sine';o1.frequency.setValueAtTime(110,now);o1.frequency.exponentialRampToValueAtTime(420,now+5.7);
-    g1.gain.setValueAtTime(.0001,now);g1.gain.exponentialRampToValueAtTime(.12,now+.5);g1.gain.linearRampToValueAtTime(.055,now+4.9);g1.gain.exponentialRampToValueAtTime(.0001,now+d);
-    o1.connect(g1);g1.connect(master);o1.start(now);o1.stop(now+d);nodes.push(o1,g1);
-
-    const o2=a.createOscillator(),g2=a.createGain();o2.type='triangle';o2.frequency.setValueAtTime(760,now+4.6);o2.frequency.exponentialRampToValueAtTime(1850,now+5.85);
-    g2.gain.setValueAtTime(.0001,now);g2.gain.setValueAtTime(.0001,now+4.45);g2.gain.exponentialRampToValueAtTime(.09,now+5.35);g2.gain.exponentialRampToValueAtTime(.0001,now+d);
-    o2.connect(g2);g2.connect(master);o2.start(now);o2.stop(now+d);nodes.push(o2,g2);
-  };
-  return {play,stop,unlock:()=>unlock(),get unlocked(){return unlocked;}};
-})();
+  const stop=()=>{try{audio.pause();audio.currentTime=0;}catch{}};
+  const play=()=>{if(!unlocked)return;stop();try{audio.currentTime=0;const p=audio.play();p?.catch?.(()=>{});}catch{}};
+  return {play,stop,unlock,get unlocked(){return unlocked;}};
+})();;
 
 
 class ArtworkHumanoidEngine{
@@ -116,21 +93,22 @@ class ArtworkHumanoidEngine{
   replay(){if(!this.loaded){this.pendingReplay=true;return;}this.pendingReplay=false;if(this.reduced||!this.effects){this.cancel(true);return;}this.assemblyActive=true;this.assemblyStart=performance.now();this.shockActive=false;this.targetYaw=this.yaw=0;this.targetPitch=this.pitch=0;if(this.label){this.label.textContent='ASSEMBLY // 0%';this.label.classList.add('show');}if(this.backdrop)this.backdrop.style.opacity=this.mode==='inline'?'.24':'.18';AssemblySfx.play();}
   skip(){this.cancel(true);}
   cancel(toIdle=false){this.pendingReplay=false;this.assemblyActive=false;this.shockActive=false;AssemblySfx.stop();if(this.label)this.label.classList.remove('show');if(this.backdrop)this.backdrop.style.opacity=this.mode==='inline'?'.58':'.64';if(toIdle)this.setState('IDLE');}
-  pointer(e){if(this.reduced||!this.effects||this.assemblyActive||this.shockActive)return;const r=this.container.getBoundingClientRect();const px=e.clientX-r.left,py=e.clientY-r.top;const hx=this.mapX(320),hy=this.mapY(170),hw=this.rect.s*120,hh=this.rect.s*150;const inside=px>=hx-hw&&px<=hx+hw&&py>=hy-hh&&py<=hy+hh;if(!inside){this.targetYaw=0;this.targetPitch=0;return;}const nx=clamp((px-hx)/hw,-1,1),ny=clamp((py-hy)/hh,-1,1);this.targetYaw=nx*20;this.targetPitch=ny*-5;this.lastPointerAt=performance.now();}
+  pointer(e){if(this.reduced||!this.effects||this.assemblyActive||this.shockActive)return;const r=this.container.getBoundingClientRect();const px=e.clientX-r.left,py=e.clientY-r.top;const hx=this.mapX(320),hy=this.mapY(170),hw=this.rect.s*120,hh=this.rect.s*150;const inside=px>=hx-hw&&px<=hx+hw&&py>=hy-hh&&py<=hy+hh;if(!inside){this.targetYaw=0;this.targetPitch=0;return;}const nx=clamp((px-hx)/hw,-1,1),ny=clamp((py-hy)/hh,-1,1);this.targetYaw=nx*32;this.targetPitch=ny*-6;this.lastPointerAt=performance.now();}
   mapX(x){return this.rect.x+x*this.rect.s}mapY(y){return this.rect.y+y*this.rect.s}
   drawStaticFigure(alpha=1){const c=this.ctx;c.save();c.globalAlpha=alpha;const breath=(!this.reduced&&this.effects)?1+Math.sin(performance.now()*.00108)*.0045:1;const h=this.rect.h*breath,y=this.rect.y-(h-this.rect.h)*.36;c.drawImage(this.figure,this.rect.x,y,this.rect.w,h);c.restore();}
   drawBodyOnly(){const c=this.ctx;c.save();const breath=(!this.reduced&&this.effects)?1+Math.sin(performance.now()*.00108)*.0045:1;const h=this.rect.h*breath,y=this.rect.y-(h-this.rect.h)*.36;c.drawImage(this.bodyOff,this.rect.x,y,this.rect.w,h);c.restore();}
   drawHeadTurn(){
-    const c=this.ctx,maxAngle=20,ang=this.yaw*Math.PI/180,abs=Math.min(1,Math.abs(this.yaw)/maxAngle);
+    const c=this.ctx,maxAngle=32,ang=this.yaw*Math.PI/180,abs=Math.min(1,Math.abs(this.yaw)/maxAngle);
     this.drawBodyOnly();
 
     // Rotate around the lower neck instead of the face center so the head never detaches.
     const cx=320,cy=170,rx=82,ry=116,depth=46,pivotY=258;
     const pivotX=this.mapX(cx),pivotScreenY=this.mapY(pivotY);
-    const scaleX=Math.max(.78,Math.cos(ang)*.995);
+    const scaleX=Math.max(.62,1-abs*.38);
 
     c.save();
-    c.translate(pivotX,pivotScreenY+this.pitch*.14);
+    const turnShift=(this.yaw/maxAngle)*this.rect.s*30;
+    c.translate(pivotX+turnShift,pivotScreenY+this.pitch*.14);
     c.scale(scaleX,1);
 
     // Head + upper-neck clip keeps a continuous silhouette with the torso.
@@ -177,7 +155,7 @@ class ArtworkHumanoidEngine{
 
     if(abs>.045){
       const side=this.yaw>=0?1:-1;
-      const px=this.mapX(cx)+side*(this.rect.s*rx*scaleX*.97),py=this.mapY(cy);
+      const px=this.mapX(cx)+turnShift+side*(this.rect.s*rx*scaleX*.97),py=this.mapY(cy);
       c.save();c.globalCompositeOperation='lighter';
       c.strokeStyle=`rgba(83,237,255,${.18+abs*.52})`;c.lineWidth=Math.max(1,this.rect.s*(1.05+abs*.5));
       c.shadowBlur=9+abs*14;c.shadowColor='#47eaff';
