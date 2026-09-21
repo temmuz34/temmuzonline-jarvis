@@ -67,7 +67,7 @@ function validConfig(c){return c&&M.validTimes(c.settings?.times)&&typeof c.sett
 const providers=require('./business-providers.cjs').createProviders(process.env,fetch,storage);
 const businessAPI=require('./business-api.cjs').createBusinessAPI({getState:()=>state,persist,runAudit,providers});
 const monitor=require('./background-jobs.cjs').runner({getState:()=>state,persist,syncGoogle,runAudit,googleStatus:()=>google.status(),providers});
-const mime={'.html':'text/html;charset=utf-8','.js':'text/javascript;charset=utf-8','.css':'text/css;charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.ico':'image/x-icon'};
+const mime={'.html':'text/html;charset=utf-8','.js':'text/javascript;charset=utf-8','.css':'text/css;charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.mp3':'audio/mpeg','.wav':'audio/wav','.webm':'audio/webm','.svg':'image/svg+xml','.ico':'image/x-icon'};
 const server=http.createServer(async(req,res)=>{
   let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);}catch{return json(res,400,{error:'Geçersiz adres'});}
   if(pathname==='/api/scheduler/run'){
