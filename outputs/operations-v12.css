@@ -146,3 +146,11 @@ body.humanoid-open{overflow:hidden}
 /* Legacy procedural layers are rollback-only in v15. */
 .main-humanoid-energy-lines{display:none!important}
 @media(max-width:760px){.energy-flow-bar{grid-template-columns:40px 1fr 40px!important}.energy-flow-open{font-size:8px}.energy-flow-open small{display:none}}
+
+
+/* v15.1 — production interaction corrections */
+.main-humanoid-inline{pointer-events:auto!important;cursor:default!important}
+#face-talk{display:none!important;pointer-events:none!important}
+.energy-flow-status-only{pointer-events:none!important;cursor:default!important;color:#72939d!important}
+.energy-flow-status-only:hover{background:transparent!important;color:#72939d!important}
+.energy-flow-status-only small{display:inline!important;font-size:8px!important;color:#72dce9!important}
