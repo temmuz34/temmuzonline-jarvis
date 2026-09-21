@@ -68,9 +68,9 @@ class ArtworkHumanoidEngine{
     const r=this.container.getBoundingClientRect();this.w=Math.max(1,r.width);this.h=Math.max(1,r.height);this.dpr=Math.min(devicePixelRatio||1,this.mode==='inline'?1.5:1.75);
     this.canvas.width=Math.round(this.w*this.dpr);this.canvas.height=Math.round(this.h*this.dpr);this.canvas.style.width=this.w+'px';this.canvas.style.height=this.h+'px';
     this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
-    const widthRatio=this.mode==='inline'?1.08:.58;const heightRatio=this.mode==='inline'?1.02:.78;
+    const widthRatio=this.mode==='inline'?.92:.58;const heightRatio=this.mode==='inline'?.90:.78;
     const s=Math.min((this.w*widthRatio)/640,(this.h*heightRatio)/400);
-    const fw=640*s,fh=400*s;const cx=this.w*.5;const cy=this.mode==='inline'?this.h*.53:this.h*.52;
+    const fw=640*s,fh=400*s;const cx=this.w*.5;const cy=this.mode==='inline'?this.h*.51:this.h*.52;
     this.rect={x:cx-fw/2,y:cy-fh/2,w:fw,h:fh,s};
   }
   setState(s){this.state=String(s||'IDLE').toUpperCase();}
@@ -80,12 +80,12 @@ class ArtworkHumanoidEngine{
   replay(){if(!this.loaded){this.pendingReplay=true;return;}this.pendingReplay=false;if(this.reduced||!this.effects){this.cancel(true);return;}this.assemblyActive=true;this.assemblyStart=performance.now();this.shockActive=false;this.targetYaw=this.yaw=0;this.targetPitch=this.pitch=0;if(this.label){this.label.textContent='ASSEMBLY // 0%';this.label.classList.add('show');}if(this.backdrop)this.backdrop.style.opacity=this.mode==='inline'?'.24':'.18';}
   skip(){this.cancel(true);}
   cancel(toIdle=false){this.pendingReplay=false;this.assemblyActive=false;this.shockActive=false;if(this.label)this.label.classList.remove('show');if(this.backdrop)this.backdrop.style.opacity=this.mode==='inline'?'.58':'.64';if(toIdle)this.setState('IDLE');}
-  pointer(e){if(this.reduced||!this.effects||this.assemblyActive||this.shockActive)return;const r=this.container.getBoundingClientRect();const px=e.clientX-r.left,py=e.clientY-r.top;const hx=this.mapX(320),hy=this.mapY(170),hw=this.rect.s*120,hh=this.rect.s*150;const inside=px>=hx-hw&&px<=hx+hw&&py>=hy-hh&&py<=hy+hh;if(!inside){this.targetYaw=0;this.targetPitch=0;return;}const nx=clamp((px-hx)/hw,-1,1),ny=clamp((py-hy)/hh,-1,1);this.targetYaw=nx*26;this.targetPitch=ny*-6;this.lastPointerAt=performance.now();}
+  pointer(e){if(this.reduced||!this.effects||this.assemblyActive||this.shockActive)return;const r=this.container.getBoundingClientRect();const px=e.clientX-r.left,py=e.clientY-r.top;const hx=this.mapX(320),hy=this.mapY(170),hw=this.rect.s*120,hh=this.rect.s*150;const inside=px>=hx-hw&&px<=hx+hw&&py>=hy-hh&&py<=hy+hh;if(!inside){this.targetYaw=0;this.targetPitch=0;return;}const nx=clamp((px-hx)/hw,-1,1),ny=clamp((py-hy)/hh,-1,1);this.targetYaw=nx*20;this.targetPitch=ny*-5;this.lastPointerAt=performance.now();}
   mapX(x){return this.rect.x+x*this.rect.s}mapY(y){return this.rect.y+y*this.rect.s}
   drawStaticFigure(alpha=1){const c=this.ctx;c.save();c.globalAlpha=alpha;const breath=(!this.reduced&&this.effects)?1+Math.sin(performance.now()*.00108)*.0045:1;const h=this.rect.h*breath,y=this.rect.y-(h-this.rect.h)*.36;c.drawImage(this.figure,this.rect.x,y,this.rect.w,h);c.restore();}
   drawBodyOnly(){const c=this.ctx;c.save();const breath=(!this.reduced&&this.effects)?1+Math.sin(performance.now()*.00108)*.0045:1;const h=this.rect.h*breath,y=this.rect.y-(h-this.rect.h)*.36;c.drawImage(this.bodyOff,this.rect.x,y,this.rect.w,h);c.restore();}
   drawHeadTurn(){
-    const c=this.ctx,maxAngle=26,ang=this.yaw*Math.PI/180,abs=Math.min(1,Math.abs(this.yaw)/maxAngle);
+    const c=this.ctx,maxAngle=20,ang=this.yaw*Math.PI/180,abs=Math.min(1,Math.abs(this.yaw)/maxAngle);
     this.drawBodyOnly();
 
     // Keep the approved front artwork visible through the turn.
@@ -114,7 +114,7 @@ class ArtworkHumanoidEngine{
       const g=c.createLinearGradient(side>0?x0:x1,0,side>0?x1:x0,0);
       g.addColorStop(0,'rgba(0,0,0,.02)');
       g.addColorStop(.52,`rgba(0,0,0,${.05+abs*.08})`);
-      g.addColorStop(1,`rgba(0,0,0,${.30+abs*.34})`);
+      g.addColorStop(1,`rgba(0,0,0,${.18+abs*.24})`);
       c.fillStyle=g;
       c.fillRect(x0,-this.rect.s*ry,this.rect.s*rx*2,this.rect.s*ry*2);
     }
@@ -122,10 +122,10 @@ class ArtworkHumanoidEngine{
 
     // Depth tiles preserve local artwork patches and slightly grow to cover rotation gaps.
     const cos=Math.cos(ang),sin=Math.sin(ang);
-    const pointSize=Math.max(1.0,this.rect.s*(1.28+abs*.48));
+    const pointSize=Math.max(1.0,this.rect.s*(1.12+abs*.20));
     c.save();
-    c.globalCompositeOperation='lighter';
-    c.globalAlpha=.58;
+    c.globalCompositeOperation='source-over';
+    c.globalAlpha=.22;
     for(const p of this.headPoints){
       const dx=p.x-cx,nx=dx/rx;
       const nz=Math.sqrt(Math.max(0,1-nx*nx));
