@@ -13,7 +13,10 @@
   <script src="operations-model.js" defer></script>
   <script src="growth-ui.js" defer></script>
   <script src="executive-brief.js" defer></script>
-  <script src="reference-energy-engine.js" defer></script>
+  <script src="orb-engine.js" defer></script>
+  <script src="humanoid-view.js" defer></script>
+  <script src="voice-client.js" defer></script>
+  <script src="dashboard-business.js" defer></script>
   <script src="operations-v12.js" defer></script>
   <script src="jarvis-router.js"></script>
   <script src="content-service.js"></script>
@@ -51,10 +54,32 @@
         <button class="command-button" id="run-report"><i data-lucide="clipboard-list">▤</i> Tüm ekip rapor versin</button>
       </aside>
       <div class="scene-shell" id="scene-shell">
-        <div class="scene-label"><span>J.A.R.V.I.S</span><span id="voice-label">HAZIR</span></div>
-        <canvas id="aiHumanoid" aria-label="Mavi enerji damarları ve parçacıklardan oluşan JARVIS silüeti"></canvas>
+        <div class="scene-label"><span>J.A.R.V.I.S // CORE</span><span id="voice-label">HAZIR</span></div>
+        <canvas id="jarvis-orb" aria-label="JARVIS durum çekirdeği"></canvas>
+        <div class="main-humanoid-inline" id="main-humanoid-inline" aria-label="JARVIS humanoid ana görünümü">
+          <img class="main-humanoid-backdrop" src="assets/artwork-candidates/mountains.webp" alt="">
+          <canvas class="main-humanoid-fx" id="main-humanoid-fx" aria-hidden="true"></canvas>
+          <div class="main-humanoid-assembly-label" id="main-humanoid-assembly-label">ASSEMBLY // 0%</div>
+          <svg class="main-humanoid-figure" viewBox="0 0 640 400" role="img" aria-label="JARVIS enerji humanoid">
+            <defs>
+              <clipPath id="main-humanoid-body-clip"><path d="M72,400 L72,368 C105,333 155,310 215,291 C237,284 249,265 250,239 C250,219 251,198 250,176 C249,118 275,75 320,72 C365,75 391,118 390,176 C389,198 390,219 390,239 C391,265 403,284 425,291 C485,310 535,333 568,368 L568,400 Z"/></clipPath>
+              <clipPath id="main-humanoid-head-clip"><ellipse cx="320" cy="170" rx="82" ry="111"/></clipPath>
+              <radialGradient id="main-core-gradient" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fff7c8" stop-opacity=".92"/><stop offset="18%" stop-color="#ffd25d" stop-opacity=".86"/><stop offset="45%" stop-color="#ff9d0a" stop-opacity=".58"/><stop offset="78%" stop-color="#f56a00" stop-opacity=".16"/><stop offset="100%" stop-color="#f56a00" stop-opacity="0"/></radialGradient>
+              <filter id="main-cyan-glow"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              <filter id="main-amber-glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+            <g class="main-humanoid-body"><image href="assets/artwork-candidates/shockwave.webp" x="0" y="0" width="640" height="400" clip-path="url(#main-humanoid-body-clip)" preserveAspectRatio="xMidYMid meet"/></g>
+            <g class="main-humanoid-head"><image href="assets/artwork-candidates/shockwave.webp" x="0" y="0" width="640" height="400" clip-path="url(#main-humanoid-head-clip)" preserveAspectRatio="xMidYMid meet"/><ellipse cx="320" cy="170" rx="83" ry="112" fill="none" stroke="#51edff" stroke-width="1.6" opacity=".16" filter="url(#main-cyan-glow)"/></g>
+            <g id="main-humanoid-core-overlay" opacity=".28" filter="url(#main-amber-glow)"><ellipse cx="320" cy="177" rx="74" ry="65" fill="url(#main-core-gradient)"/></g>
+          </svg>
+          <div class="main-humanoid-energy-lines" aria-hidden="true"></div>
+        </div>
         <button id="face-talk" title="JARVIS ile mikrofonla konuş" aria-label="JARVIS ile mikrofonla konuş" aria-pressed="false"></button>
-        <div class="scene-bottom"><button class="icon-button" id="replay" aria-label="Oluşumu yeniden oynat" title="Oluşumu yeniden oynat"><i data-lucide="rotate-ccw">↻</i></button><span id="state">BAŞLATILIYOR</span><button class="icon-button" id="mic-button" aria-label="Mikrofonu aç" title="Mikrofonu aç" aria-pressed="false"><i data-lucide="mic">●</i></button></div>
+        <div class="scene-bottom energy-flow-bar" aria-label="JARVIS hızlı kontrolleri">
+          <button class="energy-flow-icon" id="main-humanoid-replay" type="button" aria-label="Humanoid açılışını tekrar oynat" title="Açılışı tekrar oynat">↻</button>
+          <button class="energy-flow-open" id="humanoid-open" type="button" aria-haspopup="dialog"><span>ENERJİ AKIŞI</span><small id="state">HAZIR</small></button>
+          <button class="energy-flow-icon" id="mic-button" aria-label="Mikrofonu aç" title="Mikrofonu aç" aria-pressed="false"><i data-lucide="mic">●</i></button>
+        </div>
       </div>
       <aside class="chat-panel" aria-label="JARVIS sohbet">
         <div class="chat-heading"><div><strong>JARVIS</strong><span>Operasyon asistanı</span></div><button class="icon-button" id="voice-output" aria-label="Sesli yanıt" title="Sesli yanıt" aria-pressed="false"><i data-lucide="volume-x">♪</i></button></div>
@@ -122,7 +147,8 @@
           <div class="setting-row"><div><h3>Otomatik ekip raporu</h3><p>Her gün, tüm aktif uzmanlar. Türkiye saati (UTC+3).</p></div><label class="switch"><input type="checkbox" id="schedule-enabled"><span>Etkin</span></label></div>
           <div class="time-fields"><label>Sabah raporu<input id="morning-time" type="time" required value="08:00"></label><label>Öğleden sonra raporu<input id="afternoon-time" type="time" required value="13:00"></label></div>
           <p class="connection-note" id="scheduler-note">Sunucu bağlantısı kontrol ediliyor…</p>
-          <div class="setting-row"><div><h3>Sesli yanıt</h3><p>JARVIS yanıtlarını Türkçe seslendirir.</p></div><label class="switch"><input id="speech-enabled" type="checkbox"><span>Etkin</span></label></div>
+          <div class="setting-row"><div><h3>Sesli yanıt</h3><p>JARVIS yanıtlarını Türkçe seslendirir. AI TTS etkinse duyduğunuz ses yapay olarak üretilir.</p></div><label class="switch"><input id="speech-enabled" type="checkbox"><span>Etkin</span></label></div>
+          <div class="setting-row"><div><h3>Jarvis uyandırma sözcüğü</h3><p>"Jarvis" veya "Hey Jarvis" dendiğinde dinlemeye geçer.</p></div><label class="switch"><input id="wake-enabled" type="checkbox"><span>Etkin</span></label></div>
           <div class="setting-row"><div><h3>Veri bağlantıları</h3><p>Pazaryerleri ve reklam hesabı bağlı değil; satışlar örnek veri. Google bağlantı durumu aşağıda gösterilir.</p></div><span class="status-badge">Bağlı değil</span></div>
           <p id="settings-error" class="form-error" role="alert"></p><button class="command-button" type="submit"><i data-lucide="save">✓</i> Ayarları kaydet</button>
         </form>
@@ -130,6 +156,89 @@
     </main>
     <footer><span>TEMMUZONLINE / OPERASYON GÜNLÜĞÜ</span><span id="audit">Merkez hazır.</span></footer>
   </div>
+  <section id="humanoid-view" class="humanoid-view humanoid-final" hidden aria-label="JARVIS humanoid görünümü" aria-modal="true" role="dialog">
+    <div class="humanoid-stage" id="humanoid-stage">
+      <img id="humanoid-backdrop" class="humanoid-backdrop" src="assets/artwork-candidates/mountains.webp" alt="" aria-hidden="true">
+      <canvas id="humanoid-fx" class="humanoid-fx" aria-hidden="true"></canvas>
+
+      <div id="humanoid-entity-wrap" class="humanoid-entity-wrap" aria-label="JARVIS humanoid görseli">
+        <svg id="humanoid-entity" viewBox="0 0 640 400" role="img" aria-label="Enerji humanoid">
+          <defs>
+            <clipPath id="humanoid-body-clip">
+              <path d="M72,400 L72,368 C105,333 155,310 215,291 C237,284 249,265 250,239 C250,219 251,198 250,176 C249,118 275,75 320,72 C365,75 391,118 390,176 C389,198 390,219 390,239 C391,265 403,284 425,291 C485,310 535,333 568,368 L568,400 Z"/>
+            </clipPath>
+            <clipPath id="humanoid-head-clip"><ellipse cx="320" cy="170" rx="82" ry="111"/></clipPath>
+            <radialGradient id="humanoid-core-gradient" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff7c8" stop-opacity=".92"/>
+              <stop offset="18%" stop-color="#ffd25d" stop-opacity=".86"/>
+              <stop offset="45%" stop-color="#ff9d0a" stop-opacity=".58"/>
+              <stop offset="78%" stop-color="#f56a00" stop-opacity=".16"/>
+              <stop offset="100%" stop-color="#f56a00" stop-opacity="0"/>
+            </radialGradient>
+            <filter id="humanoid-cyan-glow"><feGaussianBlur stdDeviation="3.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="humanoid-amber-glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <g class="humanoid-body-breath" id="humanoid-body-group">
+            <image href="assets/artwork-candidates/shockwave.webp" x="0" y="0" width="640" height="400" clip-path="url(#humanoid-body-clip)" preserveAspectRatio="xMidYMid meet"/>
+          </g>
+          <g id="humanoid-head-group" class="humanoid-head-turn">
+            <image href="assets/artwork-candidates/shockwave.webp" x="0" y="0" width="640" height="400" clip-path="url(#humanoid-head-clip)" preserveAspectRatio="xMidYMid meet"/>
+            <ellipse id="humanoid-profile-line" cx="320" cy="170" rx="83" ry="112" fill="none" stroke="#51edff" stroke-width="2" opacity=".12" filter="url(#humanoid-cyan-glow)"/>
+          </g>
+          <g id="humanoid-core-overlay" opacity=".26" filter="url(#humanoid-amber-glow)"><ellipse cx="320" cy="177" rx="74" ry="65" fill="url(#humanoid-core-gradient)"/></g>
+        </svg>
+      </div>
+
+      <img id="humanoid-original-reference" class="humanoid-original-reference" src="assets/artwork-candidates/humanoid-figure-transparent.webp" alt="Onaylı humanoid gerçek görüntü karşılaştırması">
+      <div id="humanoid-assembly-label" class="humanoid-assembly-label">ASSEMBLY // 0%</div>
+    </div>
+
+    <div class="humanoid-overlay-ui">
+      <header class="humanoid-final-header">
+        <div class="humanoid-final-brand">
+          <span class="humanoid-kicker">J.A.R.V.I.S // HUMANOID CORE</span>
+          <strong>TEMMUZ ONLINE INTELLIGENCE SYSTEM</strong>
+          <small id="humanoid-live-state">Gerçek durum: IDLE</small>
+        </div>
+        <div class="humanoid-header-actions">
+          <button id="humanoid-compare" class="humanoid-secondary" type="button" aria-pressed="false">Karşılaştır</button>
+          <button id="humanoid-effects" class="humanoid-secondary" type="button" aria-pressed="true">Efektler açık</button>
+          <button id="humanoid-exit" class="humanoid-exit" type="button">Çıkış</button>
+        </div>
+      </header>
+
+      <div class="humanoid-side-status humanoid-side-left"><span>NEURAL MESH</span><b>ONLINE</b></div>
+      <div class="humanoid-side-status humanoid-side-right"><span>VOICE REACTIVE</span><b id="humanoid-voice-hud">STANDBY</b></div>
+
+      <div class="humanoid-final-bottom">
+        <div class="humanoid-status" id="humanoid-status">IDLE // STABLE</div>
+        <div class="humanoid-preview-strip" aria-label="Humanoid durum önizlemeleri">
+          <button type="button" data-humanoid-preview="IDLE" class="active">Idle</button>
+          <button type="button" data-humanoid-preview="LISTENING">Listening</button>
+          <button type="button" data-humanoid-preview="THINKING">Thinking</button>
+          <button type="button" data-humanoid-preview="SPEAKING">Speaking</button>
+          <button type="button" id="humanoid-replay">Replay</button>
+          <button type="button" id="humanoid-skip">Skip</button>
+        </div>
+      </div>
+    </div>
+
+    <details class="humanoid-technical" id="humanoid-technical">
+      <summary>Teknik detaylar</summary>
+      <div class="humanoid-technical-grid">
+        <div><span>Görsel motor</span><strong>Real artwork particle renderer</strong></div>
+        <div><span>Canlı durum</span><strong id="humanoid-tech-state">IDLE</strong></div>
+        <div><span>Shockwave</span><strong>2.5 saniye</strong></div>
+        <div><span>Reduced motion</span><strong id="humanoid-tech-reduced">—</strong></div>
+        <div><span>Voice energy</span><strong id="humanoid-tech-audio">Playback status fallback</strong></div>
+        <div><span>Backdrop</span><strong>mountains.webp</strong></div>
+      </div>
+      <p>Gerçek konuşmada JARVIS durum olayları bu görünümü doğrudan günceller. `jarvis-level` gerçek playback seviyesi sağlarsa yüz parlaklığı onu kullanır; seviye yoksa yalnız playback durumuna bağlı basit konuşma efekti kullanılır.</p>
+      <button type="button" id="humanoid-diagnostics" class="humanoid-secondary">İsteğe bağlı kontrolü çalıştır</button>
+      <pre id="humanoid-diagnostics-output">Kontrol çalıştırılmadı.</pre>
+    </details>
+  </section>
+
   <dialog id="expert-dialog"><form id="expert-form"><div class="dialog-heading"><h2 id="expert-dialog-title">Uzman bilgileri</h2><button class="icon-button" type="button" id="close-expert" title="Kapat" aria-label="Kapat"><i data-lucide="x">×</i></button></div><input type="hidden" id="expert-id"><label>İsim<input id="expert-name" maxlength="60" required></label><label>Uzmanlık<input id="expert-role" maxlength="80" required></label><label>Sorumluluk<input id="expert-task" maxlength="180" required></label><label>Rapor notu<textarea id="expert-note" maxlength="1500" rows="4" placeholder="Uzmanın raporuna eklenecek güncel not"></textarea></label><label class="switch"><input id="expert-active" type="checkbox" checked><span>Günlük raporlara dahil et</span></label><div class="dialog-actions"><button type="button" class="danger-button" id="delete-expert">Uzmanı kaldır</button><button class="command-button" type="submit">Kaydet</button></div><div id="delete-confirm" hidden><p>Bu uzman ekipten kaldırılsın mı? Önceki raporları arşivde kalır.</p><button type="button" class="danger-button" id="confirm-delete">Evet, kaldır</button></div><p class="form-error" id="expert-error" role="alert"></p></form></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
 </body>

@@ -6,7 +6,7 @@ Ekip üyeleri yazılım içindeki rol tanımlarıdır. Aktif kart, rapora dahil 
 
 Kalıcı veri için Neon PostgreSQL ve `STORAGE_MODE=postgres` kullanılır. Önce JSON yedeği alıp `npm run migrate:storage` çalıştır. Ayrıntılı kurulum `UPGRADE-REPORT.md` içindedir.
 
-Render Build Command: `npm install`  
+Render Build Command: `npm ci`  
 Render Start Command: `npm start`
 
 08:00 ve 13:00 raporları için dış scheduler `POST /api/scheduler/run` adresini `Authorization: Bearer <SCHEDULE_SECRET>` ile çağırır. Render Free uyuyabileceği için yalnız `setInterval` kesin saat garantisi vermez.
